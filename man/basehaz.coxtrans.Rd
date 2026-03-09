@@ -13,7 +13,7 @@
 baseline hazard function. If \code{NULL}, the function will predict the
 baseline hazard function at the unique event times in the fitted data.}
 
-\item{...}{Additional arguments (not Additional arguments (not unused).).}
+\item{...}{Additional arguments (unused).}
 }
 \value{
 A \code{data.frame} with one row for each time point, and columns

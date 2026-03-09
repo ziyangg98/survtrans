@@ -2,16 +2,21 @@
 using namespace Rcpp;
 using namespace arma;
 
-// Optimized helper function to calculate the maximum value within each group
-NumericVector ave_max(NumericVector x, NumericVector group) {
+// Internal helper (modifies in place) for use within C++
+NumericVector ave_max_inplace(NumericVector x, NumericVector group) {
   int n = x.size();
-  // Pre-compute maximum values for each group
   for (int i = n - 2; i >= 0; --i) {
     if (group[i] == group[i + 1]) {
       x[i] = std::max(x[i], x[i + 1]);
     }
   }
   return x;
+}
+
+// [[Rcpp::export]]
+NumericVector ave_max(NumericVector x, NumericVector group) {
+  NumericVector result = clone(x);
+  return ave_max_inplace(result, group);
 }
 
 // [[Rcpp::export]]
@@ -29,7 +34,7 @@ List calc_grad_hess(NumericVector lp, NumericMatrix x,
 
   NumericVector hazard = exp(lp);
   NumericVector cumsum_hazard = cumsum(hazard);
-  NumericVector risk_set = ave_max(cumsum_hazard, time);
+  NumericVector risk_set = ave_max_inplace(cumsum_hazard, time);
 
   // Precompute hazard_x for gradient calculations
   mat arma_x(x.begin(), n_samples, n_features, false);
@@ -40,7 +45,7 @@ List calc_grad_hess(NumericVector lp, NumericMatrix x,
   for (int j = 0; j < n_features; j++) {
     vec col = hazard_x.col(j);
     vec cumsum_col = cumsum(col);
-    risk_set_x.col(j) = vec(ave_max(wrap(cumsum_col), time).begin(), n_samples, false);
+    risk_set_x.col(j) = vec(ave_max_inplace(wrap(cumsum_col), time).begin(), n_samples, false);
   }
 
   // Compute risk_set_x_ratio
@@ -59,7 +64,7 @@ List calc_grad_hess(NumericVector lp, NumericMatrix x,
     for (int k = 0; k < n_features; k++) {
       vec col = hazard_xx.tube(j, k);
       vec cumsum_col = cumsum(col);
-      vec max_col = vec(ave_max(wrap(cumsum_col), time).begin(), n_samples, false);
+      vec max_col = vec(ave_max_inplace(wrap(cumsum_col), time).begin(), n_samples, false);
       risk_set_xx_ratio.tube(j, k) = max_col / vec(risk_set.begin(), risk_set.size(), false);
     }
   }

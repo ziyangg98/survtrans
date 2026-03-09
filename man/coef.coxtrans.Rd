@@ -7,9 +7,9 @@
 \method{coef}{coxtrans}(object, ...)
 }
 \arguments{
-\item{object}{An object of class \code{coxstream}.}
+\item{object}{An object of class \code{coxtrans}.}
 
-\item{...}{Additional arguments (not unused).}
+\item{...}{Additional arguments (unused).}
 }
 \value{
 A named numeric vector containing the coefficients of the fitted

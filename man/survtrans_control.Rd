@@ -19,6 +19,11 @@ Default is 300.}
 \item{verbose}{a logical value indicating whether to print messages
 during the fitting process. Default is \code{FALSE}.}
 }
+\value{
+A list with components \code{abstol}, \code{reltol},
+\code{maxit}, and \code{verbose}.
+}
 \description{
 Ancillary arguments for controlling survtrans fitting
 }
+\keyword{internal}

@@ -5,6 +5,10 @@ approx_likelihood <- function(offset, time, status) {
     .Call(`_survtrans_approx_likelihood`, offset, time, status)
 }
 
+ave_max <- function(x, group) {
+    .Call(`_survtrans_ave_max`, x, group)
+}
+
 calc_grad_hess <- function(lp, x, time, status) {
     .Call(`_survtrans_calc_grad_hess`, lp, x, time, status)
 }

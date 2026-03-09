@@ -7,7 +7,7 @@
 \method{vcov}{coxtrans}(object, ...)
 }
 \arguments{
-\item{object}{An object of class \code{coxstream}.}
+\item{object}{An object of class \code{coxtrans}.}
 
 \item{...}{Additional arguments (unused).}
 }

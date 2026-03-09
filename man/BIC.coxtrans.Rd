@@ -7,13 +7,13 @@
 \method{BIC}{coxtrans}(object, type = c("traditional", "modified"), ...)
 }
 \arguments{
-\item{object}{An object of class \code{coxstream}.}
+\item{object}{An object of class \code{coxtrans}.}
 
 \item{type}{A character string specifying the type of BIC to compute.
 "traditional" corresponds to Cn=1, and "modified" corresponds to
 Cn=log(log(d)).}
 
-\item{...}{Additional arguments (not unused).}
+\item{...}{Additional arguments (unused).}
 }
 \value{
 A numeric value representing the BIC of the fitted \code{coxtrans}

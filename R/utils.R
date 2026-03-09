@@ -13,7 +13,7 @@ basehaz <- function(object, ...) {
 #'
 #' @param object Any object.
 #' @param ... Additional arguments.
-#' @return A ggplot object.
+#' @return Called for its side effect of producing diagnostic plots. Returns \code{NULL} invisibly.
 #' @export
 diagnose <- function(object, ...) {
   UseMethod("diagnose")

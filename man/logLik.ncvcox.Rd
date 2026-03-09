@@ -9,7 +9,7 @@
 \arguments{
 \item{object}{An object of class \code{ncvcox}.}
 
-\item{...}{Additional arguments (not unused).}
+\item{...}{Additional arguments (unused).}
 }
 \value{
 A numeric value representing the log-likelihood of the fitted

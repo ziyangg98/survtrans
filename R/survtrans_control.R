@@ -7,6 +7,9 @@
 #'  Default is 300.
 #' @param verbose a logical value indicating whether to print messages
 #'  during the fitting process. Default is \code{FALSE}.
+#' @return A list with components \code{abstol}, \code{reltol},
+#'  \code{maxit}, and \code{verbose}.
+#' @keywords internal
 survtrans_control <- function(
     abstol = 1e-4, reltol = 1e-3, maxit = 300, verbose = FALSE) {
   if (abstol <= 0) stop("Invalid absolute tolerance")

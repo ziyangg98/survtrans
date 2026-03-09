@@ -12,7 +12,7 @@ diagnose(object, ...)
 \item{...}{Additional arguments.}
 }
 \value{
-A ggplot object.
+Called for its side effect of producing diagnostic plots. Returns \code{NULL} invisibly.
 }
 \description{
 Generic function for diagnose

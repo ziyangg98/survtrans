@@ -24,6 +24,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// ave_max
+NumericVector ave_max(NumericVector x, NumericVector group);
+RcppExport SEXP _survtrans_ave_max(SEXP xSEXP, SEXP groupSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type group(groupSEXP);
+    rcpp_result_gen = Rcpp::wrap(ave_max(x, group));
+    return rcpp_result_gen;
+END_RCPP
+}
 // calc_grad_hess
 List calc_grad_hess(NumericVector lp, NumericMatrix x, NumericVector time, NumericVector status);
 RcppExport SEXP _survtrans_calc_grad_hess(SEXP lpSEXP, SEXP xSEXP, SEXP timeSEXP, SEXP statusSEXP) {
@@ -71,6 +83,7 @@ END_RCPP
 
 static const R_CallMethodDef CallEntries[] = {
     {"_survtrans_approx_likelihood", (DL_FUNC) &_survtrans_approx_likelihood, 3},
+    {"_survtrans_ave_max", (DL_FUNC) &_survtrans_ave_max, 2},
     {"_survtrans_calc_grad_hess", (DL_FUNC) &_survtrans_calc_grad_hess, 4},
     {"_survtrans_close_update", (DL_FUNC) &_survtrans_close_update, 5},
     {"_survtrans_threshold_prox", (DL_FUNC) &_survtrans_threshold_prox, 5},

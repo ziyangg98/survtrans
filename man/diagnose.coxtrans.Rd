@@ -7,9 +7,13 @@
 \method{diagnose}{coxtrans}(object, ...)
 }
 \arguments{
-\item{object}{An object of class \code{coxstream}.}
+\item{object}{An object of class \code{coxtrans}.}
 
 \item{...}{Additional arguments (currently unused).}
+}
+\value{
+Invisibly returns \code{NULL}. Called for its side effect of
+producing diagnostic plots.
 }
 \description{
 Diagnose Cox Transfer Model's Optimization Process

@@ -2,18 +2,12 @@
 % Please edit documentation in R/ncvcox.R
 \name{predict.ncvcox}
 \alias{predict.ncvcox}
-\title{Prediction method for \code{coxtrans} objects.}
+\title{Prediction method for \code{ncvcox} objects.}
 \usage{
-\method{predict}{ncvcox}(
-  object,
-  newdata = NULL,
-  newgroup = NULL,
-  type = c("lp", "terms", "risk", "expected", "survival"),
-  ...
-)
+\method{predict}{ncvcox}(object, newdata = NULL, newgroup = NULL, type = c("lp", "risk"), ...)
 }
 \arguments{
-\item{object}{An object of class \code{coxtrans}.}
+\item{object}{An object of class \code{ncvcox}.}
 
 \item{newdata}{Optional new data for making predictions. If omitted,
 predictions are made using the data used for fitting the model.}
@@ -24,19 +18,14 @@ predictions are made using the groups from the original data.}
 \item{type}{The type of prediction to perform. Options include:
 \describe{
 \item{\code{"lp"}}{The linear predictor.}
-\item{\code{"terms"}}{The components of the linear predictor.}
 \item{\code{"risk"}}{The risk score \eqn{\exp(\text{lp})}.}
-\item{\code{"expected"}}{The expected number of events, given the
-covariates and follow-up time.}
-\item{\code{"survival"}}{The survival probability, given the covariates
-and follow-up time.}
 }}
 
-\item{...}{Additional arguments (not unused).}
+\item{...}{Additional arguments (unused).}
 }
 \value{
 A numeric vector of predictions.
 }
 \description{
-Prediction method for \code{coxtrans} objects.
+Prediction method for \code{ncvcox} objects.
 }

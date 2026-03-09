@@ -13,7 +13,7 @@
 "traditional" corresponds to Cn=1, and "modified" corresponds to
 Cn=log(log(d)).}
 
-\item{...}{Additional arguments (not unused).}
+\item{...}{Additional arguments (unused).}
 }
 \value{
 A numeric value representing the BIC of the fitted \code{ncvcox}

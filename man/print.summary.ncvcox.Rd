@@ -22,7 +22,7 @@ print for numeric values.}
 \item{signif.stars}{Logical; if \code{TRUE}, significance stars are printed
 along with the p-values.}
 
-\item{...}{Additional arguments (not unused).}
+\item{...}{Additional arguments (unused).}
 }
 \value{
 The function prints the summary of the \code{ncvcox} model and

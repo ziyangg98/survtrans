@@ -7,9 +7,9 @@
 \method{logLik}{coxtrans}(object, ...)
 }
 \arguments{
-\item{object}{An object of class \code{coxstream}.}
+\item{object}{An object of class \code{coxtrans}.}
 
-\item{...}{Additional arguments (not unused).}
+\item{...}{Additional arguments (unused).}
 }
 \value{
 A numeric value representing the log-likelihood of the fitted

@@ -50,7 +50,7 @@ ncvcox <- function(
   risk_set_size <- stats::ave(rep(1, n_samples), group, FUN = cumsum)
   risk_set_size <- unlist(lapply(1:n_groups, function(k) {
     idx <- group_idxs[[k]]
-    stats::ave(risk_set_size[idx], time[idx], FUN = max)
+    ave_max(risk_set_size[idx], time[idx])
   }))
   null_deviance <- -sum(status * log(risk_set_size))
 
@@ -117,10 +117,10 @@ ncvcox <- function(
     # Calculate the log-likelihood
     offset <- x %*% beta
     hazard <- exp(offset)
-    risk_set <- stats::ave(hazard, group, FUN = cumsum)
+    risk_set <- numeric(n_samples)
     for (k in 1:n_groups) {
       idx <- group_idxs[[k]]
-      risk_set[idx] <- stats::ave(risk_set[idx], time[idx], FUN = max)
+      risk_set[idx] <- ave_max(cumsum(hazard[idx]), time[idx])
     }
     loss <- sum(status * (offset - log(risk_set)))
     loss_penalty <- penalty(beta, penalty, lambda, gamma) * n_samples
@@ -188,7 +188,7 @@ ncvcox <- function(
 
 #' Extract the coefficients from a \code{ncvcox} object
 #' @param object An object of class \code{ncvcox}.
-#' @param ... Additional arguments (not unused).
+#' @param ... Additional arguments (unused).
 #' @return A named numeric vector containing the coefficients of the fitted
 #' \code{ncvcox} object. Zero coefficients are removed.
 #' @export
@@ -205,7 +205,7 @@ coef.ncvcox <- function(object, ...) {
 #' coefficients.
 #' @export
 vcov.ncvcox <- function(object, ...) {
-  # Properties of the coxens object
+  # Properties of the ncvcox object
   time <- object$time
   status <- object$status
   group <- object$group
@@ -243,12 +243,12 @@ vcov.ncvcox <- function(object, ...) {
 #' @title Log-likelihood for a \code{ncvcox} object
 #'
 #' @param object An object of class \code{ncvcox}.
-#' @param ... Additional arguments (not unused).
+#' @param ... Additional arguments (unused).
 #' @return A numeric value representing the log-likelihood of the fitted
 #' \code{ncvcox} object.
 #' @export
 logLik.ncvcox <- function(object, ...) {
-  # Properties of the coxens object
+  # Properties of the ncvcox object
   time <- object$time
   status <- object$status
   group <- object$group
@@ -261,11 +261,11 @@ logLik.ncvcox <- function(object, ...) {
   # Calculate the log-likelihood
   offset <- x %*% coefficients
   hazard <- exp(offset)
-  risk_set <- stats::ave(hazard, group, FUN = cumsum)
-  risk_set <- unlist(lapply(seq_len(n_groups), function(k) {
+  risk_set <- numeric(nrow(x))
+  for (k in seq_len(n_groups)) {
     idx <- group_idxs[[k]]
-    stats::ave(risk_set[idx], time[idx], FUN = max)
-  })) # Update the risk set for each group based on unique time points
+    risk_set[idx] <- ave_max(cumsum(hazard[idx]), time[idx])
+  }
   sum(status * (offset - log(risk_set)))
 }
 
@@ -275,7 +275,7 @@ logLik.ncvcox <- function(object, ...) {
 #' @param type A character string specifying the type of BIC to compute.
 #' "traditional" corresponds to Cn=1, and "modified" corresponds to
 #' Cn=log(log(d)).
-#' @param ... Additional arguments (not unused).
+#' @param ... Additional arguments (unused).
 #' @return A numeric value representing the BIC of the fitted \code{ncvcox}
 #' object.
 #' @export
@@ -410,7 +410,7 @@ summary.ncvcox <- function(object, conf.int = 0.95, compressed = TRUE, ...) {
 #' print for numeric values.
 #' @param signif.stars Logical; if \code{TRUE}, significance stars are printed
 #' along with the p-values.
-#' @param ... Additional arguments (not unused).
+#' @param ... Additional arguments (unused).
 #' @return The function prints the summary of the \code{ncvcox} model and
 #' returns the object \code{x} invisibly.
 #' @details The function provides a formatted output that includes:
@@ -449,8 +449,8 @@ print.summary.ncvcox <- function(
   invisible(x)
 }
 
-#' Prediction method for \code{coxtrans} objects.
-#' @param object An object of class \code{coxtrans}.
+#' Prediction method for \code{ncvcox} objects.
+#' @param object An object of class \code{ncvcox}.
 #' @param newdata Optional new data for making predictions. If omitted,
 #'   predictions are made using the data used for fitting the model.
 #' @param newgroup Optional new group for making predictions. If omitted,
@@ -458,23 +458,18 @@ print.summary.ncvcox <- function(
 #' @param type The type of prediction to perform. Options include:
 #'   \describe{
 #'     \item{\code{"lp"}}{The linear predictor.}
-#'     \item{\code{"terms"}}{The components of the linear predictor.}
 #'     \item{\code{"risk"}}{The risk score \eqn{\exp(\text{lp})}.}
-#'     \item{\code{"expected"}}{The expected number of events, given the
-#'              covariates and follow-up time.}
-#'     \item{\code{"survival"}}{The survival probability, given the covariates
-#'             and follow-up time.}
 #'   }
-#' @param ... Additional arguments (not unused).
+#' @param ... Additional arguments (unused).
 #' @return A numeric vector of predictions.
 #' @export
 predict.ncvcox <- function(
     object, newdata = NULL, newgroup = NULL,
-    type = c("lp", "terms", "risk", "expected", "survival"), ...) {
+    type = c("lp", "risk"), ...) {
   type <- match.arg(type)
   x <- stats::model.matrix(object$formula, newdata)[, -1]
 
-  # Properties of the coxtrans object
+  # Properties of the ncvcox object
   coefficients <- object$coefficients * attr(x, "scale")
 
   lp <- x %*% coefficients
@@ -494,7 +489,7 @@ predict.ncvcox <- function(
 #' @param newdata A numeric vector of time points at which to predict the
 #' baseline hazard function. If \code{NULL}, the function will predict the
 #' baseline hazard function at the unique event times in the fitted data.
-#' @param ... Additional arguments (not Additional arguments (not unused).).
+#' @param ... Additional arguments (unused).
 #'
 #' @return A \code{data.frame} with one row for each time point, and columns
 #' containing the event time, the cumulative baseline hazard function, and the
@@ -513,25 +508,26 @@ basehaz.ncvcox <- function(object, newdata, ...) {
 
   offset <- x %*% coefficients
   hazard <- exp(offset)
-  risk_set <- stats::ave(hazard, group, FUN = cumsum)
+  risk_set <- numeric(nrow(x))
   for (k in seq_len(n_groups)) {
     idx <- group_idxs[[k]]
-    risk_set[idx] <- stats::ave(risk_set[idx], time[idx], FUN = max)
+    risk_set[idx] <- ave_max(cumsum(hazard[idx]), time[idx])
   }
 
-  basehaz_df <- data.frame()
+  basehaz_list <- vector("list", n_groups)
   for (k in seq_len(n_groups)) {
     idx <- group_idxs[[k]]
     time_rev <- rev(time[idx])
     status_rev <- rev(status[idx])
     risk_set_rev <- rev(risk_set[idx])
     basehaz <- cumsum(status_rev / risk_set_rev)
-    basehaz_df <- rbind(basehaz_df, data.frame(
+    basehaz_list[[k]] <- data.frame(
       time = time_rev[status_rev == 1],
       basehaz = basehaz[status_rev == 1],
       strata = group_levels[k]
-    ))
+    )
   }
+  basehaz_df <- do.call(rbind, basehaz_list)
   if (n_groups == 1) {
     basehaz_df$strata <- NULL
   }
