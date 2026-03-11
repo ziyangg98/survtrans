@@ -655,16 +655,15 @@ logLik.coxtrans <- function(object, ...) {
 #'
 #' @param object An object of class \code{coxtrans}.
 #' @param type A character string specifying the type of BIC to compute.
-#' "traditional" corresponds to Cn=1, and "modified" corresponds to
-#' Cn=log(log(d)).
+#' \code{"traditional"} uses Cn=1, \code{"modified"} uses Cn=log(log(p*K)),
+#' and \code{"extended"} adds an EBIC penalty 2*gamma*k*log(p) with gamma=0.5.
 #' @param ... Additional arguments (unused).
 #' @return A numeric value representing the BIC of the fitted \code{coxtrans}
 #' object.
 #' @export
-BIC.coxtrans <- function(object, type = c("traditional", "modified"), ...) {
+BIC.coxtrans <- function(object, type = c("traditional", "modified", "extended"), ...) {
   type <- match.arg(type)
 
-  # Properties of the coxtrans object
   coefficients <- object$coefficients
   n_samples <- nrow(object$x)
   n_features <- nrow(coefficients)
@@ -673,10 +672,40 @@ BIC.coxtrans <- function(object, type = c("traditional", "modified"), ...) {
 
   loglik <- logLik(object)
 
-  # The parameter of the BIC
-  c_n <- ifelse(type == "traditional", 1, log(log(n_features * n_groups)))
+  if (type == "extended") {
+    return(-2 * loglik + n_parameters * log(n_samples) +
+      2 * 0.5 * n_parameters * log(n_features))
+  }
 
+  c_n <- ifelse(type == "traditional", 1, log(log(n_features * n_groups)))
   return(-2 * loglik + c_n * n_parameters * log(n_samples))
+}
+
+#' AIC for a \code{coxtrans} object
+#'
+#' @param object An object of class \code{coxtrans}.
+#' @param type A character string specifying the type of AIC to compute.
+#' \code{"traditional"} is the classical AIC, and \code{"corrected"} applies
+#' the small-sample correction (AICc).
+#' @param ... Additional arguments (unused).
+#' @param k The penalty per parameter. Default is 2.
+#' @return A numeric value representing the AIC of the fitted \code{coxtrans}
+#' object.
+#' @export
+AIC.coxtrans <- function(object, ..., type = c("traditional", "corrected"), k = 2) {
+  type <- match.arg(type)
+
+  n_parameters <- length(coef(object))
+  loglik <- logLik(object)
+  aic <- -2 * loglik + k * n_parameters
+
+  if (type == "corrected") {
+    n_samples <- nrow(object$x)
+    aic <- aic + 2 * n_parameters * (n_parameters + 1) /
+      max(n_samples - n_parameters - 1, 1)
+  }
+
+  return(aic)
 }
 
 #' Summary method for a \code{coxtrans} object
