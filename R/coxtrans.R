@@ -640,7 +640,7 @@ logLik.coxtrans <- function(object, ...) {
   offset <- numeric(nrow(x))
   for (k in seq_len(n_groups)) {
     idx <- group_idxs[[k]]
-    offset[idx] <- x[idx, ] %*% beta[, k]
+    offset[idx] <- x[idx, ] %*% beta[, group_levels[k]]
   }
   hazard <- exp(offset)
   risk_set <- numeric(nrow(x))
@@ -885,7 +885,7 @@ predict.coxtrans <- function(
   for (k in seq_len(n_groups)) {
     idx <- which(group == group_levels[k])
     if (length(idx) > 0) {
-      lp[idx] <- x[idx, ] %*% beta[, k]
+      lp[idx] <- x[idx, ] %*% beta[, group_levels[k]]
     }
   }
 
@@ -928,7 +928,7 @@ basehaz.coxtrans <- function(object, newdata, ...) {
   offset <- numeric(nrow(x))
   for (k in seq_len(n_groups)) {
     idx <- group_idxs[[k]]
-    offset[idx] <- x[idx, ] %*% beta[, k]
+    offset[idx] <- x[idx, ] %*% beta[, group_levels[k]]
   }
   hazard <- exp(offset)
   risk_set <- numeric(nrow(x))
