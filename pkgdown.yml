@@ -3,7 +3,7 @@ pkgdown: 2.2.0
 pkgdown_sha: ~
 articles:
   reviews: reviews.html
-last_built: 2026-03-17T11:44Z
+last_built: 2026-03-17T11:55Z
 urls:
   reference: http://gongziyang.com/survtrans/reference
   article: http://gongziyang.com/survtrans/articles
