@@ -578,11 +578,11 @@ vcov.coxtrans <- function(object, ...) {
   x <- object$x
 
   n_samples <- nrow(x)
-  group_levels <- levels(group)
-  n_groups <- length(group_levels)
-  group_idxs <- lapply(group_levels, function(g) which(group == g))
-
   coefficients <- object$coefficients
+  n_groups <- ncol(coefficients) - 1L
+  # Use coefficients column order (target-first) to match link_matrix
+  coef_groups <- colnames(coefficients)[seq_len(n_groups)]
+  group_idxs <- lapply(coef_groups, function(g) which(group == g))
 
   psi <- coef(object)
   link_matrix <- build_link_matrix(coefficients)
