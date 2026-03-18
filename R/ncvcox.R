@@ -34,7 +34,7 @@ ncvcox <- function(
   ), init, control, ...
 ) {
   # Load the data
-  data <- preprocess(formula, data, group)
+  data <- preprocess(formula, data, group = group)
   x <- data$x
   x_scale <- attr(x, "scaled:scale")
   time <- data$time
@@ -73,7 +73,7 @@ ncvcox <- function(
   w <- numeric(n_samples)
   r <- numeric(n_samples)
 
-  x2 <- x**2
+  x2 <- x^2
 
   repeat {
     n_iterations <- n_iterations + 1

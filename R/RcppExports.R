@@ -2,22 +2,21 @@
 # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
 
 approx_likelihood <- function(offset, time, status) {
-    .Call(`_survtrans_approx_likelihood`, offset, time, status)
+  .Call(`_survtrans_approx_likelihood`, offset, time, status)
 }
 
 ave_max <- function(x, group) {
-    .Call(`_survtrans_ave_max`, x, group)
+  .Call(`_survtrans_ave_max`, x, group)
 }
 
 calc_grad_hess <- function(lp, x, time, status) {
-    .Call(`_survtrans_calc_grad_hess`, lp, x, time, status)
+  .Call(`_survtrans_calc_grad_hess`, lp, x, time, status)
 }
 
 close_update <- function(z, v, penalty, lambda, gamma) {
-    .Call(`_survtrans_close_update`, z, v, penalty, lambda, gamma)
+  .Call(`_survtrans_close_update`, z, v, penalty, lambda, gamma)
 }
 
 threshold_prox <- function(y, vartheta, penalty, lambda, gamma) {
-    .Call(`_survtrans_threshold_prox`, y, vartheta, penalty, lambda, gamma)
+  .Call(`_survtrans_threshold_prox`, y, vartheta, penalty, lambda, gamma)
 }
-

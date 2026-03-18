@@ -62,6 +62,12 @@ coxtrans <- function(
 
   group_levels <- levels(group)
   target_level <- as.character(target)
+  if (!target_level %in% group_levels) {
+    stop(
+      "target '", target_level, "' not found in group levels: ",
+      paste(group_levels, collapse = ", ")
+    )
+  }
   group_levels <- c(target_level, group_levels[group_levels != target_level])
 
   n_groups <- length(group_levels)
@@ -489,7 +495,7 @@ coef.coxtrans <- function(object, ...) {
     function(j) unique(beta[j, ])
   )
 
-  is_global <- coefficients[, 1] == 0
+  is_global <- abs(coefficients[, 1]) < .Machine$double.eps^0.5
   psi_list <- lapply(seq_len(n_features), function(j) {
     vals <- phi_list[[j]]
     if (is_global[j] && length(vals) > 1) vals[-1] else vals

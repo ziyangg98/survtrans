@@ -58,10 +58,14 @@ for (k in seq_len(nfolds)) {
       coxtrans(formula, sim2[train_rows, ], sim2$group[train_rows],
         target = target,
         lambda1 = lambda1_seq[j], lambda2 = large_lambda, lambda3 = large_lambda,
-        penalty = "SCAD"),
+        penalty = "SCAD"
+      ),
       error = function(e) NULL
     )
-    if (is.null(fit)) { cv_coxtrans[k, j] <- Inf; next }
+    if (is.null(fit)) {
+      cv_coxtrans[k, j] <- Inf
+      next
+    }
 
     coefs <- fit$coefficients
     beta <- coefs[, as.character(target)] + coefs[, "Center"]
@@ -76,9 +80,11 @@ for (k in seq_len(nfolds)) {
 idx_best <- which.min(colMeans(cv_coxtrans))
 lambda1_best <- lambda1_seq[idx_best]
 
-fit_ct <- coxtrans(formula, sim2, sim2$group, target = target,
+fit_ct <- coxtrans(formula, sim2, sim2$group,
+  target = target,
   lambda1 = lambda1_best, lambda2 = large_lambda, lambda3 = large_lambda,
-  penalty = "SCAD")
+  penalty = "SCAD"
+)
 
 beta_coxtrans <- fit_ct$coefficients[, as.character(target)] +
   fit_ct$coefficients[, "Center"]
@@ -103,8 +109,10 @@ for (col in colnames(coefs)) {
 # 3. 对比表
 # ============================================================
 cat("\n=== Comparison ===\n")
-cat(sprintf("%-8s  %6s  %10s  %10s\n",
-  "Feature", "truth", "pooled", "coxtrans"))
+cat(sprintf(
+  "%-8s  %6s  %10s  %10s\n",
+  "Feature", "truth", "pooled", "coxtrans"
+))
 cat(strrep("-", 40), "\n")
 
 true_beta <- setNames(rep(0, 20), paste0("X", 1:20))
@@ -115,9 +123,11 @@ all_nonzero <- sort(unique(c(
   names(beta_coxtrans[beta_coxtrans != 0])
 )))
 for (feat in all_nonzero) {
-  cat(sprintf("%-8s  %6.1f  %10.4f  %10.4f\n",
+  cat(sprintf(
+    "%-8s  %6.1f  %10.4f  %10.4f\n",
     feat, true_beta[feat],
-    beta_pool[feat], beta_coxtrans[feat]))
+    beta_pool[feat], beta_coxtrans[feat]
+  ))
 }
 
 cat("\nTrue beta (target): X1=0.3, X2=0.3, X3=0.3, X4=0.3\n")
