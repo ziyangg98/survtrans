@@ -9,9 +9,9 @@ Description: Transfer learning for survival analysis. This package provides a
     target domain. The package now only supports the Cox proportional hazards
     model with global and local transfer learning.
 License: MIT + file LICENSE
-URL: https://github.com/SignorinoY/survtrans,
+URL: https://github.com/ziyangg98/survtrans,
     http://gongziyang.com/survtrans/
-BugReports: https://github.com/SignorinoY/survtrans/issues
+BugReports: https://github.com/ziyangg98/survtrans/issues
 Depends:
     R (>= 4.0)
 Imports:

@@ -9,9 +9,9 @@
 experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 [![CRAN
 status](https://www.r-pkg.org/badges/version/survtrans)](https://CRAN.R-project.org/package=survtrans)
-[![R-CMD-check](https://github.com/SignorinoY/survtrans/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/SignorinoY/survtrans/actions/workflows/R-CMD-check.yaml)
+[![R-CMD-check](https://github.com/ziyangg98/survtrans/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/ziyangg98/survtrans/actions/workflows/R-CMD-check.yaml)
 [![Codecov test
-coverage](https://codecov.io/gh/SignorinoY/survtrans/graph/badge.svg)](https://app.codecov.io/gh/SignorinoY/survtrans)
+coverage](https://codecov.io/gh/ziyangg98/survtrans/graph/badge.svg)](https://app.codecov.io/gh/ziyangg98/survtrans)
 <!-- badges: end -->
 
 The goal of **survtrans** is to provide a framework for transferring
@@ -25,7 +25,7 @@ You can install the development version of **survtrans** with:
 
 ``` r
 # install.packages("pak")
-pak::pak("SignorinoY/survtrans")
+pak::pak("ziyangg98/survtrans")
 ```
 
 ## Example

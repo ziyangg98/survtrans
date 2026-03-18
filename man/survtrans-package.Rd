@@ -11,9 +11,9 @@ Transfer learning for survival analysis. This package provides a framework for t
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/SignorinoY/survtrans}
+  \item \url{https://github.com/ziyangg98/survtrans}
   \item \url{http://gongziyang.com/survtrans/}
-  \item Report bugs at \url{https://github.com/SignorinoY/survtrans/issues}
+  \item Report bugs at \url{https://github.com/ziyangg98/survtrans/issues}
 }
 
 }
