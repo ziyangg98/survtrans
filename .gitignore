@@ -1,8 +1,53 @@
+# R
 .Rproj.user
 .Rhistory
+.RData
 .Rdata
 .httr-oauth
-.DS_Store
 .quarto
 docs
 inst/doc
+
+# Compiled code
+src/*.o
+src/*.so
+src/*.dll
+src/*.dylib
+
+# R package build artifacts
+*.tar.gz
+*.Rcheck/
+
+# renv (library/staging managed by renv itself)
+renv/library/
+renv/staging/
+renv/cellar/
+renv/local/
+renv/lock/
+renv/python/
+renv/sandbox/
+
+# Claude Code
+.claude/
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# JetBrains / RStudio
+.idea/
+
+# macOS
+.DS_Store
+**/.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Coverage / profiling
+covr/
+*.gcno
+*.gcda
+*.gcov

@@ -1,0 +1,37 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: mixed-line-ending
+  - repo: local
+    hooks:
+      - id: style-files
+        name: Style R files with styler
+        entry: Rscript -e 'styler::style_file(commandArgs(TRUE))'
+        language: system
+        types: [r]
+      - id: lintr
+        name: Lint R files
+        entry: Rscript -e 'for (f in commandArgs(TRUE)) print(lintr::lint(f))'
+        language: system
+        types: [r]
+      - id: parsable-R
+        name: Check R files are parsable
+        entry: Rscript -e 'for (f in commandArgs(TRUE)) parse(f)'
+        language: system
+        types: [r]
+      - id: readme-rmd-rendered
+        name: Check README.md is up-to-date with README.Rmd
+        entry: bash -c 'if [ README.Rmd -nt README.md ]; then echo "README.md is out of date. Run devtools::build_readme() first."; exit 1; fi'
+        language: system
+        files: README\.Rmd$
+        pass_filenames: false
+      - id: no-browser-statement
+        name: No browser() statements
+        entry: Rscript -e 'for (f in commandArgs(TRUE)) if (any(grepl("browser[(][)]", readLines(f)))) stop(f, " contains browser()")'
+        language: system
+        types: [r]
