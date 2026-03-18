@@ -9,7 +9,6 @@ reference:
 - title: "Inference"
   contents:
   - logLik.coxtrans
-  - BIC.coxtrans
   - coef.coxtrans
   - vcov.coxtrans
   - summary.coxtrans
@@ -26,7 +25,6 @@ reference:
   - simsurv_tl
   - ncvcox
   - logLik.ncvcox
-  - BIC.ncvcox
   - coef.ncvcox
   - vcov.ncvcox
   - summary.ncvcox
@@ -34,7 +32,6 @@ reference:
   - predict.ncvcox
   - basehaz.ncvcox
   - diagnose
-  - penalty
   - preprocess
 - title: "Data Sets"
   contents:
@@ -42,3 +39,6 @@ reference:
 - title: internal
   contents:
   - basehaz
+  - penalty_value
+  - reexports
+  - survtrans-package
