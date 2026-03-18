@@ -20,22 +20,23 @@
 #' @return An object of class \code{ncvcox}.
 #' @export
 #' @examples
-#' formula <- survival::Surv(time, status) ~ . - group - id
+#' formula <- Surv(time, status) ~ . - group - id
 #' df <- sim2[sim2$group == 2 | sim2$group == 4, ]
 #' fit <- ncvcox(formula, df, df$group, lambda = 0.1, penalty = "SCAD")
 #' summary(fit)
 ncvcox <- function(
-    formula, data, group, lambda = 0,
-    penalty = c("lasso", "MCP", "SCAD"),
-    gamma = switch(penalty,
-      SCAD = 3.7,
-      MCP = 3,
-      1
-    ), init, control, ...) {
+  formula, data, group, lambda = 0,
+  penalty = c("lasso", "MCP", "SCAD"),
+  gamma = switch(penalty,
+    SCAD = 3.7,
+    MCP = 3,
+    1
+  ), init, control, ...
+) {
   # Load the data
   data <- preprocess(formula, data, group)
   x <- data$x
-  x_scale <- attr(x, "scale")
+  x_scale <- attr(x, "scaled:scale")
   time <- data$time
   status <- data$status
   group <- data$group
@@ -45,14 +46,7 @@ ncvcox <- function(
   n_features <- ncol(x)
   n_groups <- length(unique(group))
   group_levels <- levels(group)
-  group_idxs <- lapply(group_levels, function(x) which(group == x))
-
-  risk_set_size <- stats::ave(rep(1, n_samples), group, FUN = cumsum)
-  risk_set_size <- unlist(lapply(1:n_groups, function(k) {
-    idx <- group_idxs[[k]]
-    ave_max(risk_set_size[idx], time[idx])
-  }))
-  null_deviance <- -sum(status * log(risk_set_size))
+  group_idxs <- lapply(group_levels, function(g) which(group == g))
 
   # Check the penalty argument
   penalty <- match.arg(penalty, choices = c("lasso", "MCP", "SCAD"))
@@ -71,8 +65,8 @@ ncvcox <- function(
 
   # Initialize the training process
   n_iterations <- 0
-  message <- ""
-  convergence <- FALSE
+  msg <- ""
+  converged <- FALSE
   beta <- init
 
   offset <- x %*% beta
@@ -86,7 +80,7 @@ ncvcox <- function(
     beta_prev <- beta
 
     # Calculate the weights and residuals
-    for (k in 1:n_groups) {
+    for (k in seq_len(n_groups)) {
       idx <- group_idxs[[k]]
       wls <- approx_likelihood(
         offset = offset[idx], time = time[idx], status = status[idx]
@@ -117,13 +111,9 @@ ncvcox <- function(
     # Calculate the log-likelihood
     offset <- x %*% beta
     hazard <- exp(offset)
-    risk_set <- numeric(n_samples)
-    for (k in 1:n_groups) {
-      idx <- group_idxs[[k]]
-      risk_set[idx] <- ave_max(cumsum(hazard[idx]), time[idx])
-    }
+    risk_set <- calc_risk_set(hazard, time, group_idxs)
     loss <- sum(status * (offset - log(risk_set)))
-    loss_penalty <- penalty(beta, penalty, lambda, gamma) * n_samples
+    loss_penalty <- penalty_value(beta, penalty, lambda, gamma) * n_samples
     loss_total <- loss - loss_penalty
     if (control$verbose) {
       cat(
@@ -136,42 +126,31 @@ ncvcox <- function(
       )
     }
 
-    # Check the convergence
-    if (is.infinite(loss) || is.nan(loss)) {
-      stop("The log-likelihood is not finite. Stopping the algorithm.")
-    }
-    if (n_iterations >= control$maxit) {
-      convergence <- TRUE
-      message <- stringr::str_glue(
-        "Maximum number of iterations reached (", control$maxit, ")."
-      )
-    }
+    # Check convergence (order: convergence > early stop > maxit)
     if (max(abs(beta - beta_prev)) <= control$abstol) {
-      convergence <- TRUE
-      message <- stringr::str_glue(
-        "Convergence reached at iteration ", n_iterations, "."
-      )
+      converged <- TRUE
+      msg <- sprintf("Convergence reached at iteration %d.", n_iterations)
+    } else if (is.infinite(loss) || is.nan(loss)) {
+      converged <- TRUE
+      msg <- "Log-likelihood is not finite. Stopping."
+    } else if (n_iterations >= control$maxit) {
+      converged <- TRUE
+      msg <- sprintf("Maximum number of iterations reached (%d).", control$maxit)
     }
-    if (loss / null_deviance < 0.01) {
-      convergence <- TRUE
-      message <- stringr::str_glue(
-        "The log-likelihood is too small (", loss / null_deviance,
-        "). Stopping the algorithm."
-      )
-    }
-    if (convergence) break
+    if (converged) break
   }
 
-  # Unstandardize the beta
+  # Unstandardize coefficients and design matrix (match coxtrans convention)
   coefficients <- beta / x_scale
   names(coefficients) <- colnames(x)
+  x <- sweep(x, 2, x_scale, "*")
 
   # Return the fit
   fit <- list(
-    coefficients = beta,
+    coefficients = coefficients,
     logLik = loss,
     iter = n_iterations,
-    message = message,
+    message = msg,
     penalty = penalty,
     lambda = lambda,
     gamma = gamma,
@@ -214,7 +193,7 @@ vcov.ncvcox <- function(object, ...) {
   group_levels <- levels(group)
   n_groups <- length(group_levels)
   group_idxs <- lapply(group_levels, function(g) which(group == g))
-  coefficients <- object$coefficients * attr(x, "scale")
+  coefficients <- object$coefficients
 
   # Select the non-zero coefficients and corresponding variables
   coefs <- coefficients[coefficients != 0]
@@ -225,7 +204,7 @@ vcov.ncvcox <- function(object, ...) {
   lp <- x %*% coefs
   gradients <- matrix(0, nrow = n_samples, ncol = n_nonzero)
   hessians <- matrix(0, nrow = n_samples, ncol = n_nonzero^2)
-  for (k in 1:n_groups) {
+  for (k in seq_len(n_groups)) {
     idx <- group_idxs[[k]]
     ghs <- calc_grad_hess(
       lp[idx], x[idx, , drop = FALSE], time[idx], status[idx]
@@ -234,10 +213,11 @@ vcov.ncvcox <- function(object, ...) {
     hessians[idx, ] <- ghs$hess
   }
   hess <- matrix(colSums(hessians), n_nonzero, n_nonzero)
-  cov_grad <- stats::cov(gradients) * n_samples
   hess_inv <- solve(hess)
-
-  hess_inv %*% cov_grad %*% hess_inv
+  grad_cov <- crossprod(gradients)
+  vcov <- hess_inv %*% grad_cov %*% hess_inv
+  dimnames(vcov) <- list(names(coefs), names(coefs))
+  vcov
 }
 
 #' @title Log-likelihood for a \code{ncvcox} object
@@ -256,47 +236,12 @@ logLik.ncvcox <- function(object, ...) {
   n_groups <- length(unique(group))
   group_levels <- levels(group)
   group_idxs <- lapply(group_levels, function(g) which(group == g))
-  coefficients <- object$coefficients * attr(x, "scale")
+  coefficients <- object$coefficients
 
-  # Calculate the log-likelihood
   offset <- x %*% coefficients
   hazard <- exp(offset)
-  risk_set <- numeric(nrow(x))
-  for (k in seq_len(n_groups)) {
-    idx <- group_idxs[[k]]
-    risk_set[idx] <- ave_max(cumsum(hazard[idx]), time[idx])
-  }
+  risk_set <- calc_risk_set(hazard, time, group_idxs)
   sum(status * (offset - log(risk_set)))
-}
-
-#' BIC for a \code{ncvcox} object
-#'
-#' @param object An object of class \code{ncvcox}.
-#' @param type A character string specifying the type of BIC to compute.
-#' "traditional" corresponds to Cn=1, and "modified" corresponds to
-#' Cn=log(log(d)).
-#' @param ... Additional arguments (unused).
-#' @return A numeric value representing the BIC of the fitted \code{ncvcox}
-#' object.
-#' @export
-BIC.ncvcox <- function(object, type = c("traditional", "modified"), ...) {
-  type <- match.arg(type)
-
-  # Properties of the ncvcox object
-  coefficients <- object$coefficients
-  n_samples <- nrow(object$x)
-  n_features <- ncol(object$x)
-
-  # The number of parameters should minus the number of active constraints
-  n_parameters <- sum(coefficients != 0)
-
-  # Log-likelihood of the model
-  loglik <- logLik(object)
-
-  # The parameter of the BIC
-  c_n <- ifelse(type == "traditional", 1, log(log(n_features)))
-
-  -2 * loglik + c_n * n_parameters * log(n_samples)
 }
 
 #' Summary method for a \code{ncvcox} object
@@ -313,7 +258,6 @@ BIC.ncvcox <- function(object, type = c("traditional", "modified"), ...) {
 #' \item{\code{n}, \code{nevent}}{Number of observations and number of events,
 #' respectively, in the fit.}
 #' \item{\code{logLik}}{The log partial likelihood at the final value.}
-#' \item{\code{BIC}}{The Bayesian Information Criterion at the final value.}
 #' \item{\code{coefficients}}{A matrix with one row for each coefficient, and
 #' columns containing the coefficient, the hazard ratio exp(coef), standard
 #' error, Wald statistic, and P value.}
@@ -326,7 +270,6 @@ summary.ncvcox <- function(object, conf.int = 0.95, compressed = TRUE, ...) {
   n_samples <- nrow(object$x)
   n_events <- sum(object$status)
   loglik <- logLik(object)
-  bic_value <- BIC(object)
 
   # Standard errors
   vcov_matrix <- vcov(object)
@@ -388,7 +331,6 @@ summary.ncvcox <- function(object, conf.int = 0.95, compressed = TRUE, ...) {
     nevent = n_events,
     logLik = loglik,
     call = object$call,
-    BIC = bic_value,
     coefficients = coef_matrix,
     conf.int = conf_int_matrix
   )
@@ -427,8 +369,9 @@ summary.ncvcox <- function(object, conf.int = 0.95, compressed = TRUE, ...) {
 #' }
 #' @export
 print.summary.ncvcox <- function(
-    x, digits = max(getOption("digits") - 3, 3),
-    signif.stars = getOption("show.signif.stars"), ...) {
+  x, digits = max(getOption("digits") - 3, 3),
+  signif.stars = getOption("show.signif.stars"), ...
+) {
   # Print call
   cat("Call:\n")
   print(x$call)
@@ -464,38 +407,25 @@ print.summary.ncvcox <- function(
 #' @return A numeric vector of predictions.
 #' @export
 predict.ncvcox <- function(
-    object, newdata = NULL, newgroup = NULL,
-    type = c("lp", "risk"), ...) {
+  object, newdata = NULL, newgroup = NULL,
+  type = c("lp", "risk"), ...
+) {
   type <- match.arg(type)
   x <- stats::model.matrix(object$formula, newdata)[, -1]
-
-  # Properties of the ncvcox object
-  coefficients <- object$coefficients * attr(x, "scale")
-
-  lp <- x %*% coefficients
-
-  if (type == "lp") {
-    return(lp)
-  } else if (type == "risk") {
-    risk <- exp(lp)
-    return(risk)
-  } else {
-    stop("type must be one of 'lp' or 'risk'")
-  }
+  lp <- as.numeric(x %*% object$coefficients)
+  if (type == "risk") lp <- exp(lp)
+  lp
 }
 #' Predict the cumulative baseline hazard function for \code{ncvcox} objects
 #'
 #' @param object An object of class \code{ncvcox}.
-#' @param newdata A numeric vector of time points at which to predict the
-#' baseline hazard function. If \code{NULL}, the function will predict the
-#' baseline hazard function at the unique event times in the fitted data.
 #' @param ... Additional arguments (unused).
 #'
 #' @return A \code{data.frame} with one row for each time point, and columns
 #' containing the event time, the cumulative baseline hazard function, and the
 #' strata.
 #' @export
-basehaz.ncvcox <- function(object, newdata, ...) {
+basehaz.ncvcox <- function(object, ...) {
   # Properties of the ncvcox object
   time <- object$time
   status <- object$status
@@ -503,16 +433,10 @@ basehaz.ncvcox <- function(object, newdata, ...) {
   x <- object$x
   n_groups <- length(unique(group))
   group_levels <- levels(group)
-  group_idxs <- lapply(group_levels, function(x) which(group == x))
-  coefficients <- object$coefficients * attr(x, "scale")
-
-  offset <- x %*% coefficients
+  group_idxs <- lapply(group_levels, function(g) which(group == g))
+  offset <- x %*% object$coefficients
   hazard <- exp(offset)
-  risk_set <- numeric(nrow(x))
-  for (k in seq_len(n_groups)) {
-    idx <- group_idxs[[k]]
-    risk_set[idx] <- ave_max(cumsum(hazard[idx]), time[idx])
-  }
+  risk_set <- calc_risk_set(hazard, time, group_idxs)
 
   basehaz_list <- vector("list", n_groups)
   for (k in seq_len(n_groups)) {

@@ -23,7 +23,6 @@ components:
 \item{\code{n}, \code{nevent}}{Number of observations and number of events,
 respectively, in the fit.}
 \item{\code{logLik}}{The log partial likelihood at the final value.}
-\item{\code{BIC}}{The Bayesian Information Criterion at the final value.}
 \item{\code{coefficients}}{A matrix with one row for each coefficient, and
 columns containing the coefficient, the hazard ratio exp(coef), standard
 error, Wald statistic, and P value.}

@@ -50,7 +50,7 @@ An object of class \code{ncvcox}.
 Non-convex penalized Cox proportional hazards model
 }
 \examples{
-formula <- survival::Surv(time, status) ~ . - group - id
+formula <- Surv(time, status) ~ . - group - id
 df <- sim2[sim2$group == 2 | sim2$group == 4, ]
 fit <- ncvcox(formula, df, df$group, lambda = 0.1, penalty = "SCAD")
 summary(fit)

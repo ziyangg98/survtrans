@@ -4,14 +4,10 @@
 \alias{basehaz.coxtrans}
 \title{Predict the cumulative baseline hazard function for \code{coxtrans} objects}
 \usage{
-\method{basehaz}{coxtrans}(object, newdata, ...)
+\method{basehaz}{coxtrans}(object, ...)
 }
 \arguments{
 \item{object}{An object of class \code{coxtrans}.}
-
-\item{newdata}{A numeric vector of time points at which to predict the
-baseline hazard function. If \code{NULL}, the function will predict the
-baseline hazard function at the unique event times in the fitted data.}
 
 \item{...}{Additional arguments (unused).}
 }

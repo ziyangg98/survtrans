@@ -16,12 +16,10 @@
 #' default is "lasso". Other options are "MCP" and "SCAD".
 #' @param gamma A non-negative value specifying the penalty parameter. The
 #' default is 3.7 for SCAD and 3.0 for MCP.
-#' @param rho A value larger than 1 specifying the increase/decrease factor
-#' for the augmented Lagrangian's penalty parameter. The default is 2.0.
-#' @param tau A value larger than 1 specifying the tolerance for the
-#' trade-off between the primal and dual residuals. The default is 10.0.
-#' @param init A numeric vector of initial values for the coefficients. The
-#' default is a zero vector.
+#' @param vartheta A positive value specifying the fixed penalty parameter in
+#' the augmented Lagrangian. Following Wang, Yin & Zeng (2019), this is kept
+#' constant (not adaptive) to guarantee convergence with non-convex penalties.
+#' The default is 1.0.
 #' @param control An object of class \link{survtrans_control} containing control
 #' parameters for the fitting algorithm. Default is
 #' \code{survtrans_control(...)}.
@@ -31,209 +29,168 @@
 #' @export
 #'
 #' @examples
-#' formula <- survival::Surv(time, status) ~ . - group - id
+#' formula <- Surv(time, status) ~ . - group - id
 #' fit <- coxtrans(
 #'   formula, sim2, sim2$group, 1,
 #'   lambda1 = 0.075, lambda2 = 0.04, lambda3 = 0.04, penalty = "SCAD"
 #' )
 #' summary(fit)
 coxtrans <- function(
-    formula, data, group, target,
-    lambda1 = 0.0, lambda2 = 0.0, lambda3 = 0.0,
-    penalty = c("lasso", "MCP", "SCAD"),
-    gamma = switch(penalty,
-      SCAD = 3.7,
-      MCP = 3,
-      1
-    ), rho = 2.0, tau = 10.0, init,
-    control, ...) {
-  # Load the data
+  formula, data, group, target,
+  lambda1 = 0.0, lambda2 = 0.0, lambda3 = 0.0,
+  penalty = c("lasso", "MCP", "SCAD"),
+  gamma = switch(penalty,
+    SCAD = 3.7,
+    MCP = 3,
+    1
+  ), vartheta = 1.0,
+  control, ...
+) {
+  penalty <- match.arg(penalty, choices = c("lasso", "MCP", "SCAD"))
+  if (missing(control)) control <- survtrans_control(...)
+  if (lambda1 < 0 || lambda2 < 0 || lambda3 < 0) {
+    stop("Lambda parameters must be non-negative")
+  }
+
+  # Preprocess data
   data <- preprocess(formula, data, group = group)
   x <- data$x
-  x_scale <- attr(x, "scale")
+  x_scale <- attr(x, "scaled:scale")
   time <- data$time
   status <- data$status
   group <- data$group
 
-  # Properties of the data
-  n_samples_total <- nrow(x)
-  n_features <- ncol(x)
-  n_groups <- length(unique(group))
   group_levels <- levels(group)
-
-  # Keep the target group at the first position
   target_level <- as.character(target)
   group_levels <- c(target_level, group_levels[group_levels != target_level])
 
-  group_idxs <- lapply(group_levels, function(x) which(group == x))
+  n_groups <- length(group_levels)
+  group_idxs <- lapply(group_levels, function(g) which(group == g))
   n_samples_group <- sapply(group_idxs, length)
+  n_samples_total <- nrow(x)
+  n_features <- ncol(x)
+  n_parameters <- n_features * (n_groups + 1)
 
-  risk_set_size <- stats::ave(rep(1, n_samples_total), group, FUN = cumsum)
-  risk_set_size <- unlist(lapply(1:n_groups, function(k) {
-    idx <- group_idxs[[k]]
-    ave_max(risk_set_size[idx], time[idx])
-  }))
-  null_deviance <- -sum(status * log(risk_set_size))
-
-  ## Check the input arguments
-  if (lambda1 < 0 || lambda2 < 0 || lambda3 < 0) {
-    stop("Lambda parameters must be non-negative")
-  }
-  penalty <- match.arg(penalty, choices = c("lasso", "MCP", "SCAD"))
-  if (!missing(init) && length(init) > 0) {
-    if (length(init) != n_features * (n_groups + 1)) {
-      stop("Wrong length for inital values")
-    }
-  } else {
-    init <- rep(0, n_features * (n_groups + 1))
-  }
-  if (missing(control)) control <- survtrans_control(...)
-
-  # Extract the coefficients from init vector
-  init <- sweep(matrix(init, nrow = n_features), 1, x_scale, `*`)
-  theta <- matrix(
-    data = init[, 1:(n_groups + 1), drop = FALSE],
-    nrow = n_features * (n_groups + 1), ncol = 1
-  )
-
-  # Construct pre-computed matrices
-  contr_sum <- Matrix::Matrix(
-    cbind(
-      kronecker(
-        matrix(n_samples_group / n_samples_total, nrow = 1),
-        diag(n_features)
-      ),
-      0 * diag(n_features)
+  # Construct constraint matrices
+  contr_sum <- cbind(
+    kronecker(
+      matrix(n_samples_group / n_samples_total, nrow = 1),
+      diag(n_features)
     ),
-    sparse = TRUE
+    0 * diag(n_features)
   )
-  contr_penalty <- Matrix::sparseMatrix(
-    i = c(
+  contr_pen <- matrix(0, n_parameters, n_parameters)
+  contr_pen[cbind(
+    c(
       seq_len(n_features), seq_len(n_features),
       n_features + seq_len(n_features * n_groups),
       n_features + seq_len(n_features * (n_groups - 1))
     ),
-    j = c(
+    c(
       seq_len(n_features), (n_features * n_groups) + seq_len(n_features),
       rep(1:n_features, times = n_groups),
       n_features + seq_len(n_features * (n_groups - 1))
-    ),
-    x = c(
-      rep(1, n_features * (n_groups + 2)), rep(-1, n_features * (n_groups - 1))
-    ),
-    dims = c(n_features * (n_groups + 1), n_features * (n_groups + 1))
+    )
+  )] <- c(
+    rep(1, n_features * (n_groups + 2)), rep(-1, n_features * (n_groups - 1))
   )
-  n_constraints_sum <- nrow(contr_sum)
-  n_constraints_penalty <- nrow(contr_penalty)
-  n_constraints <- n_constraints_sum + n_constraints_penalty
-  n_parameters <- n_features * (n_groups + 1)
-  contr_sum2 <- Matrix::crossprod(contr_sum)
-  contr_penalty2 <- Matrix::crossprod(contr_penalty)
-  contr2 <- contr_sum2 + contr_penalty2
+  contr_cross <- crossprod(contr_sum) + crossprod(contr_pen)
+  n_constraints <- nrow(contr_sum) + nrow(contr_pen)
+  n_constraints_penalty <- nrow(contr_pen)
 
   sparse_idx <- seq_len(n_features)
   local_idx <- n_features + seq_len(n_features * (n_groups - 1))
   global_idx <- n_features * n_groups + seq_len(n_features)
 
-  # Pre-extract per-group data for block-structure computation
-  x_group <- lapply(group_idxs, function(idx) x[idx, , drop = FALSE])
-  time_tilde <- unlist(lapply(group_idxs, function(idx) time[idx]))
-  status_tilde <- unlist(lapply(group_idxs, function(idx) status[idx]))
+  # Per-group data (stacked by group order)
+  x_by_group <- lapply(group_idxs, function(idx) x[idx, , drop = FALSE])
+  time_stacked <- unlist(lapply(group_idxs, function(idx) time[idx]))
+  status_stacked <- unlist(lapply(group_idxs, function(idx) status[idx]))
 
-  # Precompute tilde group indices (avoid recomputing each iteration)
-  tilde_group_idxs <- vector("list", n_groups)
+  stacked_group_idxs <- vector("list", n_groups)
   n_passes <- 0L
   for (k in seq_len(n_groups)) {
     nk <- length(group_idxs[[k]])
-    tilde_group_idxs[[k]] <- n_passes + seq_len(nk)
+    stacked_group_idxs[[k]] <- n_passes + seq_len(nk)
     n_passes <- n_passes + nk
   }
 
-  # Convert constraint matrices to dense for fast arithmetic in loop
-  contr_sum_dense <- as.matrix(contr_sum)
-  contr_penalty_dense <- as.matrix(contr_penalty)
-  contr2_dense <- as.matrix(contr2)
+  # Initialize ADMM variables
+  theta <- matrix(0, nrow = n_parameters, ncol = 1)
+  eta <- numeric(n_constraints_penalty)
+  mu <- numeric(n_features)
+  nu <- numeric(n_constraints_penalty)
 
   # Initialize the training process
   n_iterations <- 0
-  message <- ""
-  convergence <- FALSE
+  msg <- ""
+  converged <- FALSE
   history <- matrix(NA_real_, nrow = control$maxit, ncol = 9)
   colnames(history) <- c(
     "Iteration", "Primal.Residual", "Dual.Residual", "Primal.Epsilon",
-    "Dual.Epsilon", "Augmented.Parameter", "Negative.Log.Likelihood",
-    "Penalty.Term", "Objective"
+    "Dual.Epsilon", "Augmented.Parameter", "Log.Likelihood",
+    "Penalty.Term", "Total.Loss"
   )
 
   w <- numeric(n_samples_total)
   z <- numeric(n_samples_total)
-  offset <- numeric(n_samples_total)
-  offset_fresh <- FALSE
-
-  eta <- numeric(n_constraints_penalty)
-  mu <- numeric(n_features)
-  nu <- numeric(n_constraints_penalty)
-  vartheta <- 1
+  lag_aug_prev <- Inf
+  loss_total_prev <- Inf
 
   # Block index ranges for assembling xwx/xwz
-  p <- n_features
-  blk_idx <- lapply(seq_len(n_groups), function(k) ((k - 1) * p + 1):(k * p))
-  blk_w <- (n_groups * p + 1):((n_groups + 1) * p)
+  blk_idx <- lapply(seq_len(n_groups), function(k) {
+    ((k - 1) * n_features + 1):(k * n_features)
+  })
+  blk_center <- (n_groups * n_features + 1):((n_groups + 1) * n_features)
 
   repeat {
     n_iterations <- n_iterations + 1
 
-    # Compute per-group offset from theta (block structure)
-    if (!offset_fresh) {
-      theta_mat <- matrix(as.numeric(theta), nrow = p)
-      for (k in seq_len(n_groups)) {
-        offset[tilde_group_idxs[[k]]] <-
-          x_group[[k]] %*% (theta_mat[, k] + theta_mat[, n_groups + 1])
-      }
-    }
-    offset_fresh <- FALSE
+    # Compute per-group offset from theta
+    offset <- calc_offset(
+      theta, n_features, n_groups, x_by_group, stacked_group_idxs
+    )
 
-    # Calculate the weights and residuals
+    # Calculate the weights and working response (IRLS)
     for (k in seq_len(n_groups)) {
-      idx <- tilde_group_idxs[[k]]
+      idx <- stacked_group_idxs[[k]]
       wls <- approx_likelihood(
-        offset = offset[idx], time = time_tilde[idx], status = status_tilde[idx]
+        offset = offset[idx], time = time_stacked[idx], status = status_stacked[idx]
       )
       w[idx] <- wls$weights
       z[idx] <- wls$residuals + offset[idx]
     }
 
-    # Block-structure assembly for xwx and xwz (dense per-group crossprod)
+    # Block-structure assembly for X'WX and X'Wz
     xwx <- matrix(0, n_parameters, n_parameters)
     xwz <- numeric(n_parameters)
     for (k in seq_len(n_groups)) {
-      idx <- tilde_group_idxs[[k]]
+      idx <- stacked_group_idxs[[k]]
       w_k <- w[idx]
       z_k <- z[idx]
-      A_k <- crossprod(x_group[[k]], w_k * x_group[[k]]) / n_samples_total
-      b_k <- crossprod(x_group[[k]], w_k * z_k) / n_samples_total
+      A_k <- crossprod(x_by_group[[k]], w_k * x_by_group[[k]]) / n_samples_total
+      b_k <- crossprod(x_by_group[[k]], w_k * z_k) / n_samples_total
       xwx[blk_idx[[k]], blk_idx[[k]]] <- A_k
-      xwx[blk_idx[[k]], blk_w] <- A_k
-      xwx[blk_w, blk_idx[[k]]] <- A_k
-      xwx[blk_w, blk_w] <- xwx[blk_w, blk_w] + A_k
+      xwx[blk_idx[[k]], blk_center] <- A_k
+      xwx[blk_center, blk_idx[[k]]] <- A_k
+      xwx[blk_center, blk_center] <- xwx[blk_center, blk_center] + A_k
       xwz[blk_idx[[k]]] <- b_k
-      xwz[blk_w] <- xwz[blk_w] + b_k
+      xwz[blk_center] <- xwz[blk_center] + b_k
     }
 
-    # Solve the linear system (dense)
-    lhs <- xwx + vartheta * contr2_dense
-    rhs <- xwz - crossprod(contr_sum_dense, mu) +
-      vartheta * crossprod(contr_penalty_dense, eta - nu / vartheta)
+    # Solve the linear system
+    lhs <- xwx + vartheta * contr_cross
+    rhs <- xwz - crossprod(contr_sum, mu) +
+      vartheta * crossprod(contr_pen, eta - nu / vartheta)
     theta <- solve(lhs, rhs)
 
-    # Cache constraint products (used multiple times below)
-    Ctheta <- as.numeric(contr_penalty_dense %*% theta)
-    Stheta <- as.numeric(contr_sum_dense %*% theta)
+    # Constraint products
+    c_theta <- as.numeric(contr_pen %*% theta)
+    s_theta <- as.numeric(contr_sum %*% theta)
 
-    # Update the auxiliary variables
+    # Update auxiliary variables
     eta_old <- eta
-    eta <- Ctheta + nu / vartheta
-
+    eta <- c_theta + nu / vartheta
     eta[sparse_idx] <- threshold_prox(
       eta[sparse_idx], vartheta, penalty, lambda1, gamma
     )
@@ -243,138 +200,106 @@ coxtrans <- function(
     eta[local_idx] <- threshold_prox(
       eta[local_idx], vartheta, penalty, lambda3, gamma
     )
-    mu <- mu + vartheta * Stheta
-    nu <- nu + vartheta * (Ctheta - eta)
+    mu <- mu + vartheta * s_theta
+    nu <- nu + vartheta * (c_theta - eta)
 
-    r_vec <- c(Stheta, Ctheta - eta)
-    r_norm <- sqrt(sum(r_vec^2))
-    s_vec <- crossprod(contr_penalty_dense, eta - eta_old)
-    s_norm <- sqrt(sum(s_vec^2)) * vartheta
+    # Primal and dual residuals
+    r_norm <- sqrt(sum(s_theta^2) + sum((c_theta - eta)^2))
+    s_norm <- sqrt(sum(crossprod(contr_pen, eta - eta_old)^2)) *
+      vartheta
 
     eps_pri <- sqrt(n_constraints) * control$abstol +
       control$reltol * max(
-        sqrt(sum(Stheta^2) + sum(Ctheta^2)),
+        sqrt(sum(s_theta^2) + sum(c_theta^2)),
         sqrt(sum(eta^2))
       )
-    dual_vec <- crossprod(contr_sum_dense, mu) +
-      crossprod(contr_penalty_dense, nu)
+    dual_vec <- crossprod(contr_sum, mu) +
+      crossprod(contr_pen, nu)
     eps_dual <- sqrt(n_parameters) * control$abstol +
       control$reltol * sqrt(sum(dual_vec^2))
 
-    # Check the convergence
-    if (n_iterations >= control$maxit) {
-      convergence <- TRUE
-      message <- stringr::str_glue(
-        "Maximum number of iterations reached ({control$maxit})."
-      )
-    }
-    if (r_norm < eps_pri && s_norm < eps_dual) {
-      convergence <- TRUE
-      message <- stringr::str_glue(
-        "Convergence reached at iteration {n_iterations}."
-      )
-    }
-
-    # Compute offset for loss using per-group block structure
-    theta_mat <- matrix(as.numeric(theta), nrow = p)
-    for (k in seq_len(n_groups)) {
-      offset[tilde_group_idxs[[k]]] <-
-        x_group[[k]] %*% (theta_mat[, k] + theta_mat[, n_groups + 1])
-    }
-    offset_fresh <- TRUE
+    # Compute loss (recompute offset from updated theta)
+    offset <- calc_offset(
+      theta, n_features, n_groups, x_by_group, stacked_group_idxs
+    )
     hazard <- exp(offset)
-    risk_set <- numeric(n_samples_total)
-    for (k in seq_len(n_groups)) {
-      idx <- tilde_group_idxs[[k]]
-      risk_set[idx] <- ave_max(cumsum(hazard[idx]), time_tilde[idx])
-    }
-    loss <- sum(status_tilde * (offset - log(risk_set)))
-    if (loss / null_deviance < 0.01) {
-      convergence <- TRUE
-      message <- stringr::str_glue(
-        "The log-likelihood is too small ({loss / null_deviance}). ",
-        "Stopping the algorithm."
-      )
-    }
+    risk_set <- calc_risk_set(hazard, time_stacked, stacked_group_idxs)
+    loss <- sum(status_stacked * (offset - log(risk_set)))
 
-    loss_penalty <- penalty(Ctheta[sparse_idx], penalty, lambda1, gamma) +
-      penalty(Ctheta[global_idx], penalty, lambda2, gamma) +
-      penalty(Ctheta[local_idx], penalty, lambda3, gamma)
-    loss_penalty <- loss_penalty * n_samples_total
+    loss_penalty <- (
+      penalty_value(c_theta[sparse_idx], penalty, lambda1, gamma) +
+        penalty_value(c_theta[global_idx], penalty, lambda2, gamma) +
+        penalty_value(c_theta[local_idx], penalty, lambda3, gamma)
+    ) * n_samples_total
     loss_total <- loss - loss_penalty
 
+    # Augmented Lagrangian (Lyapunov function for convergence monitoring)
+    lag_aug <- loss_total +
+      sum(mu * s_theta) + sum(nu * (c_theta - eta)) +
+      0.5 * vartheta * (sum(s_theta^2) + sum((c_theta - eta)^2))
+
+    # Check convergence
+    if (r_norm < eps_pri && s_norm < eps_dual) {
+      converged <- TRUE
+      msg <- sprintf("Convergence reached at iteration %d.", n_iterations)
+    } else if (is.infinite(loss) || is.nan(loss)) {
+      converged <- TRUE
+      msg <- "Log-likelihood is not finite. Stopping."
+    } else if (n_iterations > 1 &&
+      (abs(lag_aug - lag_aug_prev) / (abs(lag_aug_prev) + 1) < control$fdev ||
+        abs(loss_total - loss_total_prev) / (abs(loss_total_prev) + 1) < control$fdev)) {
+      converged <- TRUE
+      msg <- sprintf("Objective stabilized at iteration %d.", n_iterations)
+    } else if (n_iterations >= control$maxit) {
+      converged <- TRUE
+      msg <- sprintf("Maximum number of iterations reached (%d).", control$maxit)
+    }
+    lag_aug_prev <- lag_aug
+    loss_total_prev <- loss_total
+
     if (control$verbose) {
-      cli::cli_h2("Iteration Info")
-      cli::cli_text("Iteration       : {.val {n_iterations}}")
-
-      cli::cli_h2("Residuals")
-      cli::cli_text(stringr::str_glue(
-        "Primal Residual : {r_norm}  (Tol: {eps_pri})"
+      cat(sprintf(
+        "Iter %d | primal %.4e (tol %.4e) | dual %.4e (tol %.4e) | loss %.4f\n",
+        n_iterations, r_norm, eps_pri, s_norm, eps_dual, loss_total
       ))
-      cli::cli_text(stringr::str_glue(
-        "Dual Residual   : {s_norm}  (Tol: {eps_dual})"
-      ))
-
-      cli::cli_h2("Optimization Parameters")
-      cli::cli_text(stringr::str_glue("Augmented Param : {vartheta}"))
-
-      cli::cli_h2("Loss Summary")
-      cli::cli_text(stringr::str_glue("Total Loss      : {loss_total}"))
-      cli::cli_text(stringr::str_glue("     - LogLik       : {loss}"))
-      cli::cli_text(stringr::str_glue("     - Penalty      : {loss_penalty}"))
-
-      cli::cli_rule()
     }
     history[n_iterations, ] <- c(
       n_iterations, r_norm, s_norm, eps_pri, eps_dual, vartheta,
       loss, loss_penalty, loss_total
     )
 
-    if (convergence) break
-
-    # Update the penalty parameter
-    if (r_norm > tau * s_norm) vartheta <- vartheta * rho
-    if (s_norm > tau * r_norm) vartheta <- vartheta / rho
-    vartheta <- min(max(vartheta, 1e-3), 2.118034)
+    if (converged) break
   }
 
-  theta <- qr.solve(contr_penalty_dense, eta)
-  eps <- max(abs(crossprod(contr_penalty_dense, eta - eta_old)))
-  eps_local <- max(abs(eta[local_idx] - eta_old[local_idx]))
-  flag_local <- matrix(abs(eta[local_idx]) <= eps_local, nrow = n_features)
+  # Post-processing: recover coefficients from ADMM solution
+  theta <- qr.solve(contr_pen, eta)
+  tol <- max(abs(crossprod(contr_pen, eta - eta_old)))
+  tol_local <- max(abs(eta[local_idx] - eta_old[local_idx]))
+  flag_local <- matrix(abs(eta[local_idx]) <= tol_local, nrow = n_features)
   flag_local <- cbind(rep(TRUE, n_features), flag_local)
 
   theta <- matrix(theta, nrow = n_features, ncol = n_groups + 1)
   delta <- theta[, seq_len(n_groups)]
-  w <- theta[, (n_groups + 1)]
+  center <- theta[, n_groups + 1]
   beta <- matrix(NA, nrow = n_features, ncol = n_groups)
 
   for (i in seq_len(n_features)) {
     delta_global <- mean(delta[i, ])
     idx <- which(flag_local[i, ])
     delta_local <- mean(delta[i, idx])
-    # Biased Penalty & Constraints
     delta[i, idx] <- ifelse(
-      abs(delta_local - delta_global) < eps, 0, delta_local - delta_global
+      abs(delta_local - delta_global) < tol, 0, delta_local - delta_global
     )
-    # Sparse Penalty
     beta[i, ] <- ifelse(
-      abs(delta[i, ] + w[i]) < eps, 0, delta[i, ] + w[i]
+      abs(delta[i, ] + center[i]) < tol, 0, delta[i, ] + center[i]
     )
   }
-  w <- rowMeans(beta)
+  center <- rowMeans(beta)
 
-  coefficients <- cbind(beta - w, w)
-  coefficients[abs(coefficients) < eps] <- 0
+  coefficients <- cbind(beta - center, center)
+  coefficients[abs(coefficients) < tol] <- 0
   colnames(coefficients) <- c(group_levels, "Center")
   rownames(coefficients) <- colnames(x)
-
-  colnames(history) <- c(
-    "Iteration", "Primal.Residual", "Dual.Residual", "Primal.Epsilon",
-    "Dual.Epsilon", "Augmented.Parameter", "Log.Likelihood",
-    "Penalty.Term", "Total.Loss"
-  )
-  history <- history[seq_len(n_iterations), ]
 
   coefficients <- sweep(coefficients, 1, x_scale, "/")
   x <- sweep(x, 2, x_scale, "*")
@@ -384,8 +309,8 @@ coxtrans <- function(
     coefficients = coefficients,
     logLik = loss,
     iter = n_iterations,
-    message = message,
-    history = history,
+    message = msg,
+    history = history[seq_len(n_iterations), , drop = FALSE],
     penalty = penalty,
     lambda1 = lambda1,
     lambda2 = lambda2,
@@ -400,7 +325,24 @@ coxtrans <- function(
     control = control
   )
   class(fit) <- "coxtrans"
-  return(fit)
+  fit
+}
+
+# Internal: compute per-group beta matrix and linear predictor from a
+# coxtrans fit object.
+calc_lp <- function(object) {
+  coefficients <- object$coefficients
+  n_groups <- ncol(coefficients) - 1L
+  group_levels <- colnames(coefficients)[seq_len(n_groups)]
+  group_idxs <- lapply(group_levels, function(g) which(object$group == g))
+  beta <- coefficients[, seq_len(n_groups)] + coefficients[, n_groups + 1L]
+
+  lp <- numeric(nrow(object$x))
+  for (k in seq_len(n_groups)) {
+    idx <- group_idxs[[k]]
+    lp[idx] <- object$x[idx, ] %*% beta[, k]
+  }
+  list(beta = beta, lp = lp, group_idxs = group_idxs, group_levels = group_levels)
 }
 
 #' Diagnose Cox Transfer Model's Optimization Process
@@ -587,7 +529,7 @@ vcov.coxtrans <- function(object, ...) {
   psi <- coef(object)
   link_matrix <- build_link_matrix(coefficients)
 
-  z <- Matrix::bdiag(lapply(group_idxs, function(idx) x[idx, ])) %*% link_matrix
+  z <- block_diag(lapply(group_idxs, function(idx) x[idx, ])) %*% link_matrix
   time <- unlist(lapply(group_idxs, function(idx) time[idx]))
   status <- unlist(lapply(group_idxs, function(idx) status[idx]))
 
@@ -626,86 +568,10 @@ vcov.coxtrans <- function(object, ...) {
 #' \code{coxtrans} object.
 #' @export
 logLik.coxtrans <- function(object, ...) {
-  # Properties of the coxtrans object
-  time <- object$time
-  status <- object$status
-  group <- object$group
-  x <- object$x
-  n_groups <- length(unique(group))
-  group_levels <- levels(group)
-  group_idxs <- lapply(group_levels, function(x) which(group == x))
-  coefficients <- object$coefficients
-
-  beta <- coefficients[, 1:n_groups] + coefficients[, (n_groups + 1)]
-  offset <- numeric(nrow(x))
-  for (k in seq_len(n_groups)) {
-    idx <- group_idxs[[k]]
-    offset[idx] <- x[idx, ] %*% beta[, group_levels[k]]
-  }
-  hazard <- exp(offset)
-  risk_set <- numeric(nrow(x))
-  for (k in seq_len(n_groups)) {
-    idx <- group_idxs[[k]]
-    risk_set[idx] <- ave_max(cumsum(hazard[idx]), time[idx])
-  }
-  sum(status * (offset - log(risk_set)))
-}
-
-#' BIC for a \code{coxtrans} object
-#'
-#' @param object An object of class \code{coxtrans}.
-#' @param type A character string specifying the type of BIC to compute.
-#' \code{"traditional"} uses Cn=1, \code{"modified"} uses Cn=log(log(p*K)),
-#' and \code{"extended"} adds an EBIC penalty 2*gamma*k*log(p) with gamma=0.5.
-#' @param ... Additional arguments (unused).
-#' @return A numeric value representing the BIC of the fitted \code{coxtrans}
-#' object.
-#' @export
-BIC.coxtrans <- function(object, type = c("traditional", "modified", "extended"), ...) {
-  type <- match.arg(type)
-
-  coefficients <- object$coefficients
-  n_samples <- nrow(object$x)
-  n_features <- nrow(coefficients)
-  n_groups <- ncol(coefficients) - 1
-  n_parameters <- length(coef(object))
-
-  loglik <- logLik(object)
-
-  if (type == "extended") {
-    return(-2 * loglik + n_parameters * log(n_samples) +
-      2 * 0.5 * n_parameters * log(n_features))
-  }
-
-  c_n <- ifelse(type == "traditional", 1, log(log(n_features * n_groups)))
-  return(-2 * loglik + c_n * n_parameters * log(n_samples))
-}
-
-#' AIC for a \code{coxtrans} object
-#'
-#' @param object An object of class \code{coxtrans}.
-#' @param type A character string specifying the type of AIC to compute.
-#' \code{"traditional"} is the classical AIC, and \code{"corrected"} applies
-#' the small-sample correction (AICc).
-#' @param ... Additional arguments (unused).
-#' @param k The penalty per parameter. Default is 2.
-#' @return A numeric value representing the AIC of the fitted \code{coxtrans}
-#' object.
-#' @export
-AIC.coxtrans <- function(object, ..., type = c("traditional", "corrected"), k = 2) {
-  type <- match.arg(type)
-
-  n_parameters <- length(coef(object))
-  loglik <- logLik(object)
-  aic <- -2 * loglik + k * n_parameters
-
-  if (type == "corrected") {
-    n_samples <- nrow(object$x)
-    aic <- aic + 2 * n_parameters * (n_parameters + 1) /
-      max(n_samples - n_parameters - 1, 1)
-  }
-
-  return(aic)
+  res <- calc_lp(object)
+  hazard <- exp(res$lp)
+  risk_set <- calc_risk_set(hazard, object$time, res$group_idxs)
+  sum(object$status * (res$lp - log(risk_set)))
 }
 
 #' Summary method for a \code{coxtrans} object
@@ -722,7 +588,6 @@ AIC.coxtrans <- function(object, ..., type = c("traditional", "corrected"), k = 
 #' \item{\code{n}, \code{nevent}}{Number of observations and number of events,
 #' respectively, in the fit.}
 #' \item{\code{logLik}}{The log partial likelihood at the final value.}
-#' \item{\code{BIC}}{The Bayesian Information Criterion at the final value.}
 #' \item{\code{coefficients}}{A matrix with one row for each coefficient, and
 #' columns containing the coefficient, the hazard ratio exp(coef), standard
 #' error, Wald statistic, and P value.}
@@ -735,7 +600,6 @@ summary.coxtrans <- function(object, conf.int = 0.95, target_only = TRUE, ...) {
   n_samples <- nrow(object$x)
   n_events <- sum(object$status)
   loglik <- logLik(object)
-  bic_value <- BIC(object)
 
   # Standard errors
   vcov_matrix <- vcov(object)
@@ -786,7 +650,6 @@ summary.coxtrans <- function(object, conf.int = 0.95, target_only = TRUE, ...) {
     nevent = n_events,
     logLik = loglik,
     call = object$call,
-    BIC = bic_value,
     coefficients = coef_matrix,
     conf.int = conf_int_matrix
   )
@@ -825,8 +688,9 @@ summary.coxtrans <- function(object, conf.int = 0.95, target_only = TRUE, ...) {
 #' }
 #' @export
 print.summary.coxtrans <- function(
-    x, digits = max(getOption("digits") - 3, 3),
-    signif.stars = getOption("show.signif.stars"), ...) {
+  x, digits = max(getOption("digits") - 3, 3),
+  signif.stars = getOption("show.signif.stars"), ...
+) {
   # Print call
   cat("Call:\n")
   print(x$call)
@@ -867,87 +731,57 @@ print.summary.coxtrans <- function(
 #' @return A numeric vector of predictions.
 #' @export
 predict.coxtrans <- function(
-    object, newdata = NULL, newgroup = NULL,
-    type = c("lp", "risk"), ...) {
+  object, newdata = NULL, newgroup = NULL,
+  type = c("lp", "risk"), ...
+) {
   type <- match.arg(type)
+
+  coefficients <- object$coefficients
+  n_groups <- ncol(coefficients) - 1L
+  group_levels <- colnames(coefficients)[seq_len(n_groups)]
+  beta <- coefficients[, seq_len(n_groups)] + coefficients[, n_groups + 1L]
+
   x <- stats::model.matrix(object$formula, newdata)[, -1]
   group <- factor(newgroup, levels = levels(object$group))
-
-  # Properties of the coxtrans object
-  group_levels <- levels(object$group)
-  n_groups <- length(unique(object$group))
-  coefficients <- object$coefficients
-  coefficients <- sweep(coefficients, 1, attr(object$x, "scale"), "*")
-
-  beta <- coefficients[, 1:n_groups] + coefficients[, (n_groups + 1)]
 
   lp <- numeric(nrow(x))
   for (k in seq_len(n_groups)) {
     idx <- which(group == group_levels[k])
     if (length(idx) > 0) {
-      lp[idx] <- x[idx, ] %*% beta[, group_levels[k]]
+      lp[idx] <- x[idx, ] %*% beta[, k]
     }
   }
 
-  if (type == "lp") {
-    return(lp)
-  } else if (type == "risk") {
-    risk <- exp(lp)
-    return(risk)
-  } else {
-    stop("type must be one of 'lp' or 'risk'")
-  }
+  if (type == "risk") lp <- exp(lp)
+  lp
 }
 
 #' Predict the cumulative baseline hazard function for \code{coxtrans} objects
 #'
 #' @param object An object of class \code{coxtrans}.
-#' @param newdata A numeric vector of time points at which to predict the
-#' baseline hazard function. If \code{NULL}, the function will predict the
-#' baseline hazard function at the unique event times in the fitted data.
 #' @param ... Additional arguments (unused).
 #'
 #' @return A \code{data.frame} with one row for each time point, and columns
 #' containing the event time, the cumulative baseline hazard function, and the
 #' strata.
 #' @export
-basehaz.coxtrans <- function(object, newdata, ...) {
-  # Properties of the coxtrans object
-  time <- object$time
-  status <- object$status
-  group <- object$group
-  x <- object$x
-  n_groups <- length(unique(group))
-  group_levels <- levels(group)
-  group_idxs <- lapply(group_levels, function(x) which(group == x))
-  coefficients <- object$coefficients
-  coefficients <- sweep(coefficients, 1, attr(x, "scale"), "*")
-
-  beta <- coefficients[, 1:n_groups] + coefficients[, (n_groups + 1)]
-
-  offset <- numeric(nrow(x))
-  for (k in seq_len(n_groups)) {
-    idx <- group_idxs[[k]]
-    offset[idx] <- x[idx, ] %*% beta[, group_levels[k]]
-  }
-  hazard <- exp(offset)
-  risk_set <- numeric(nrow(x))
-  for (k in seq_len(n_groups)) {
-    idx <- group_idxs[[k]]
-    risk_set[idx] <- ave_max(cumsum(hazard[idx]), time[idx])
-  }
+basehaz.coxtrans <- function(object, ...) {
+  res <- calc_lp(object)
+  n_groups <- length(res$group_idxs)
+  hazard <- exp(res$lp)
+  risk_set <- calc_risk_set(hazard, object$time, res$group_idxs)
 
   basehaz_list <- vector("list", n_groups)
   for (k in seq_len(n_groups)) {
-    idx <- group_idxs[[k]]
-    time_rev <- rev(time[idx])
-    status_rev <- rev(status[idx])
+    idx <- res$group_idxs[[k]]
+    time_rev <- rev(object$time[idx])
+    status_rev <- rev(object$status[idx])
     risk_set_rev <- rev(risk_set[idx])
-    basehaz <- cumsum(status_rev / risk_set_rev)
+    bh <- cumsum(status_rev / risk_set_rev)
     basehaz_list[[k]] <- data.frame(
       time = time_rev[status_rev == 1],
-      basehaz = basehaz[status_rev == 1],
-      strata = group_levels[k]
+      basehaz = bh[status_rev == 1],
+      strata = res$group_levels[k]
     )
   }
   do.call(rbind, basehaz_list)

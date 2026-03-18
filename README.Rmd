@@ -39,7 +39,9 @@ This is a basic example showing how to transfer survival information from multip
 
 ```{r example}
 library(survtrans)
-formula <- survival::Surv(time, status) ~ . - group - id
+library(ggplot2)
+
+formula <- Surv(time, status) ~ . - group - id
 fit <- coxtrans(
   formula, sim2, sim2$group, 1,
   lambda1 = 0.075, lambda2 = 0.04, lambda3 = 0.04, penalty = "SCAD"
@@ -50,7 +52,6 @@ summary(fit)
 You can also plot the estimated cumulative baseline hazard function and compare it to the true function:
 
 ```{r, basehaz, fig.alt = "Estimated vs. True Cumulative Baseline Hazard Function"}
-library(ggplot2)
 basehaz_pred <- basehaz(fit)
 basehaz_pred$color <- ifelse(
   as.numeric(basehaz_pred$strata) %% 2 == 0, "Group 2", "Group 1"

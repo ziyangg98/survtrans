@@ -20,7 +20,7 @@ NumericVector ave_max(NumericVector x, NumericVector group) {
 }
 
 // [[Rcpp::export]]
-List calc_grad_hess(NumericVector lp, NumericMatrix x, 
+List calc_grad_hess(NumericVector lp, NumericMatrix x,
                     NumericVector time, NumericVector status) {
   int n_samples = time.size();
   int n_features = x.ncol();

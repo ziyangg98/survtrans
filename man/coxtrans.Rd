@@ -14,9 +14,7 @@ coxtrans(
   lambda3 = 0,
   penalty = c("lasso", "MCP", "SCAD"),
   gamma = switch(penalty, SCAD = 3.7, MCP = 3, 1),
-  rho = 2,
-  tau = 10,
-  init,
+  vartheta = 1,
   control,
   ...
 )
@@ -47,14 +45,10 @@ default is "lasso". Other options are "MCP" and "SCAD".}
 \item{gamma}{A non-negative value specifying the penalty parameter. The
 default is 3.7 for SCAD and 3.0 for MCP.}
 
-\item{rho}{A value larger than 1 specifying the increase/decrease factor
-for the augmented Lagrangian's penalty parameter. The default is 2.0.}
-
-\item{tau}{A value larger than 1 specifying the tolerance for the
-trade-off between the primal and dual residuals. The default is 10.0.}
-
-\item{init}{A numeric vector of initial values for the coefficients. The
-default is a zero vector.}
+\item{vartheta}{A positive value specifying the fixed penalty parameter in
+the augmented Lagrangian. Following Wang, Yin & Zeng (2019), this is kept
+constant (not adaptive) to guarantee convergence with non-convex penalties.
+The default is 1.0.}
 
 \item{control}{An object of class \link{survtrans_control} containing control
 parameters for the fitting algorithm. Default is
@@ -69,7 +63,7 @@ An object of class \code{coxtrans}.
 Transfer Learning for Cox Model with Global and Local Shrinkage
 }
 \examples{
-formula <- survival::Surv(time, status) ~ . - group - id
+formula <- Surv(time, status) ~ . - group - id
 fit <- coxtrans(
   formula, sim2, sim2$group, 1,
   lambda1 = 0.075, lambda2 = 0.04, lambda3 = 0.04, penalty = "SCAD"

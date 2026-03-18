@@ -1,3 +1,7 @@
+#' @importFrom survival Surv
+#' @export
+survival::Surv
+
 #' Generic function for basehaz
 #'
 #' @param object Any object.
@@ -77,8 +81,8 @@ preprocess <- function(formula, data, group, offset) {
   time <- time[sorted]
   status <- status[sorted]
   x <- x[sorted, , drop = FALSE]
-  attr(x, "center") <- x_center
-  attr(x, "scale") <- x_scale
+  attr(x, "scaled:center") <- x_center
+  attr(x, "scaled:scale") <- x_scale
 
   offset <- offset[sorted]
   group <- group[sorted]
@@ -113,7 +117,10 @@ preprocess <- function(formula, data, group, offset) {
 #'                 `lambda`, between `lambda` and `gamma * lambda`, or above
 #'                 these thresholds.}
 #'   }
-penalty <- function(x, penalty, lambda, gamma) {
+penalty_value <- function(x, penalty, lambda, gamma) {
+  if (lambda == 0) {
+    return(0)
+  }
   x_abs <- abs(x)
   switch(penalty,
     lasso = lambda * sum(x_abs),
@@ -212,7 +219,8 @@ calc_lambda_max <- function(formula, data, group, offset) {
 #' df <- simsurv_tl(beta, eta, lambda, gamma, dist, maxt, n_samples)
 #' df
 simsurv_tl <- function(
-    beta, eta, lambda, gamma, dist, maxt, n_samples, seed = 0) {
+  beta, eta, lambda, gamma, dist, maxt, n_samples, seed = 0
+) {
   set.seed(seed)
   n_groups <- ncol(eta)
   n_features <- nrow(eta)
@@ -242,6 +250,45 @@ simsurv_tl <- function(
   df
 }
 
+# Internal: compute risk set from hazard, time, and group indices
+calc_risk_set <- function(hazard, time, group_idxs) {
+  risk_set <- numeric(length(hazard))
+  for (k in seq_along(group_idxs)) {
+    idx <- group_idxs[[k]]
+    risk_set[idx] <- ave_max(cumsum(hazard[idx]), time[idx])
+  }
+  risk_set
+}
+
+# Internal: compute per-group linear predictor offset from theta matrix
+calc_offset <- function(theta, n_features, n_groups, x_by_group,
+                        stacked_group_idxs) {
+  theta_mat <- matrix(as.numeric(theta), nrow = n_features)
+  offset <- numeric(sum(lengths(stacked_group_idxs)))
+  for (k in seq_len(n_groups)) {
+    offset[stacked_group_idxs[[k]]] <-
+      x_by_group[[k]] %*% (theta_mat[, k] + theta_mat[, n_groups + 1])
+  }
+  offset
+}
+
+# Internal: construct a dense block-diagonal matrix from a list of blocks
+block_diag <- function(blocks) {
+  total_rows <- sum(vapply(blocks, nrow, 1L))
+  total_cols <- sum(vapply(blocks, ncol, 1L))
+  result <- matrix(0, total_rows, total_cols)
+  r_off <- 0L
+  c_off <- 0L
+  for (blk in blocks) {
+    nr <- nrow(blk)
+    nc <- ncol(blk)
+    result[r_off + seq_len(nr), c_off + seq_len(nc)] <- blk
+    r_off <- r_off + nr
+    c_off <- c_off + nc
+  }
+  result
+}
+
 #' @importFrom utils head
 build_link_matrix <- function(coefficients) {
   stopifnot(is.matrix(coefficients), ncol(coefficients) >= 2)
@@ -268,20 +315,13 @@ build_link_matrix <- function(coefficients) {
   for (k in seq_len(n_groups)) {
     for (j in seq_len(n_features)) {
       i_idx[ctr] <- (k - 1L) * n_features + j
-      pos <- match(beta[j, k], phi_list[[j]])
+      pos <- which.min(abs(beta[j, k] - phi_list[[j]]))
       j_idx[ctr] <- offsets[j] + pos
       ctr <- ctr + 1L
     }
   }
-  link_local <- Matrix::sparseMatrix(
-    i = i_idx,
-    j = j_idx,
-    x = rep(1L, total_nz),
-    dims = c(
-      n_groups * n_features,
-      n_phi_total
-    )
-  )
+  link_local <- matrix(0, n_groups * n_features, n_phi_total)
+  link_local[cbind(i_idx, j_idx)] <- 1
 
   link_global_blocks <- lapply(seq_len(n_features), function(j) {
     m <- n_unique[j]
@@ -294,7 +334,5 @@ build_link_matrix <- function(coefficients) {
       diag(m)
     }
   })
-  link_global <- Matrix::bdiag(link_global_blocks)
-
-  link_local %*% link_global
+  link_local %*% block_diag(link_global_blocks)
 }

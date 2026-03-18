@@ -4,14 +4,10 @@
 \alias{basehaz.ncvcox}
 \title{Predict the cumulative baseline hazard function for \code{ncvcox} objects}
 \usage{
-\method{basehaz}{ncvcox}(object, newdata, ...)
+\method{basehaz}{ncvcox}(object, ...)
 }
 \arguments{
 \item{object}{An object of class \code{ncvcox}.}
-
-\item{newdata}{A numeric vector of time points at which to predict the
-baseline hazard function. If \code{NULL}, the function will predict the
-baseline hazard function at the unique event times in the fitted data.}
 
 \item{...}{Additional arguments (unused).}
 }

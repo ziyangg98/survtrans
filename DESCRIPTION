@@ -1,7 +1,7 @@
 Package: survtrans
 Title: Transfer Learning for Survival Analysis
 Version: 0.0.0.9000
-Authors@R: 
+Authors@R:
     person("Ziyang", "Gong", , "gongziyang@smail.swufe.edu.cn", role = c("aut", "cre"),
            comment = c(ORCID = "0009-0001-4870-9102"))
 Description: Transfer learning for survival analysis. This package provides a
@@ -12,31 +12,31 @@ License: MIT + file LICENSE
 URL: https://github.com/SignorinoY/survtrans,
     http://gongziyang.com/survtrans/
 BugReports: https://github.com/SignorinoY/survtrans/issues
-Depends: 
+Depends:
     R (>= 4.0)
-Imports: 
-    cli,
+Imports:
     graphics,
-    lifecycle,
     MASS,
-    Matrix,
     Rcpp,
     simsurv,
     stats,
     stringr,
     survival
-Suggests: 
+Suggests:
     devtools,
     ggplot2,
     grid,
     knitr,
+    lintr,
+    ncvreg,
     rmarkdown,
+    styler,
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
-LinkingTo: 
+LinkingTo:
     Rcpp,
     RcppArmadillo
 LazyData: true

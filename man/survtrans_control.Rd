@@ -4,14 +4,26 @@
 \alias{survtrans_control}
 \title{Ancillary arguments for controlling survtrans fitting}
 \usage{
-survtrans_control(abstol = 1e-04, reltol = 0.001, maxit = 300, verbose = FALSE)
+survtrans_control(
+  abstol = 1e-04,
+  reltol = 0.001,
+  fdev = 1e-05,
+  maxit = 300,
+  verbose = FALSE
+)
 }
 \arguments{
-\item{abstol}{the absolute tolerance for the proposed algorithm.
+\item{abstol}{the absolute tolerance for ADMM primal/dual residuals.
 Default is 1e-4.}
 
-\item{reltol}{the relative tolerance for the proposed algorithm.
+\item{reltol}{the relative tolerance for ADMM primal/dual residuals.
 Default is 1e-3.}
+
+\item{fdev}{the minimum fractional change of the augmented Lagrangian for
+convergence. The algorithm stops when
+\eqn{|L^{k} - L^{k-1}| / (|L^{k-1}| + 1) < fdev}, where \eqn{L} is the
+augmented Lagrangian. This provides a fallback when primal-dual residuals
+oscillate under non-convex penalties. Default is 1e-5.}
 
 \item{maxit}{the maximum number of iterations for the proposed algorithm.
 Default is 300.}
@@ -20,7 +32,7 @@ Default is 300.}
 during the fitting process. Default is \code{FALSE}.}
 }
 \value{
-A list with components \code{abstol}, \code{reltol},
+A list with components \code{abstol}, \code{reltol}, \code{fdev},
 \code{maxit}, and \code{verbose}.
 }
 \description{
