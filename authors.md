@@ -8,15 +8,15 @@
 ## Citation
 
 Source:
-[`DESCRIPTION`](https://github.com/SignorinoY/survtrans/blob/main/DESCRIPTION)
+[`DESCRIPTION`](https://github.com/ziyangg98/survtrans/blob/main/DESCRIPTION)
 
 Gong Z (2026). *survtrans: Transfer Learning for Survival Analysis*. R
-package version 0.0.0.9000, <https://github.com/SignorinoY/survtrans>.
+package version 0.0.0.9000, <https://github.com/ziyangg98/survtrans>.
 
     @Manual{,
       title = {survtrans: Transfer Learning for Survival Analysis},
       author = {Ziyang Gong},
       year = {2026},
       note = {R package version 0.0.0.9000},
-      url = {https://github.com/SignorinoY/survtrans},
+      url = {https://github.com/ziyangg98/survtrans},
     }

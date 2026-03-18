@@ -11,7 +11,7 @@ You can install the development version of **survtrans** with:
 
 ``` r
 # install.packages("pak")
-pak::pak("SignorinoY/survtrans")
+pak::pak("ziyangg98/survtrans")
 ```
 
 ## Example

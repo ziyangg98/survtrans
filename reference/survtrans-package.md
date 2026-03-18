@@ -9,11 +9,11 @@ hazards model with global and local transfer learning.
 
 Useful links:
 
-- <https://github.com/SignorinoY/survtrans>
+- <https://github.com/ziyangg98/survtrans>
 
 - <http://gongziyang.com/survtrans/>
 
-- Report bugs at <https://github.com/SignorinoY/survtrans/issues>
+- Report bugs at <https://github.com/ziyangg98/survtrans/issues>
 
 ## Author
 

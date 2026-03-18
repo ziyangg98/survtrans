@@ -29,7 +29,7 @@ advice.
 
 - Fork the package and clone onto your computer. If you haven’t done
   this before, we recommend using
-  `usethis::create_from_github("SignorinoY/survtrans", fork = TRUE)`.
+  `usethis::create_from_github("ziyangg98/survtrans", fork = TRUE)`.
 
 - Install all development dependencies with
   [`devtools::install_dev_deps()`](https://devtools.r-lib.org/reference/install_deps.html),
