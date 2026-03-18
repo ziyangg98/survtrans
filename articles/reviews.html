@@ -90,15 +90,15 @@ approaches for survival analysis.</p>
 <span><span class="co">#&gt;   n=100, number of events=83</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt;        coef exp(coef) se(coef)     z Pr(&gt;|z|)</span></span>
-<span><span class="co">#&gt; X1 0.059452  1.061254 0.117669 0.505    0.613</span></span>
-<span><span class="co">#&gt; X2 0.137457  1.147352 0.109477 1.256    0.209</span></span>
-<span><span class="co">#&gt; X3 0.002192  1.002195 0.119920 0.018    0.985</span></span>
-<span><span class="co">#&gt; X4 0.064683  1.066820 0.123495 0.524    0.600</span></span>
+<span><span class="co">#&gt; X1 0.053289  1.054734 0.108572 0.491    0.624</span></span>
+<span><span class="co">#&gt; X2 0.131001  1.139969 0.106658 1.228    0.219</span></span>
+<span><span class="co">#&gt; X3 0.002069  1.002071 0.115958 0.018    0.986</span></span>
+<span><span class="co">#&gt; X4 0.060811  1.062698 0.116182 0.523    0.601</span></span>
 <span><span class="co">#&gt;    exp(coef) exp(-coef) lower .95 upper .95</span></span>
-<span><span class="co">#&gt; X1 1.0613    0.9423     0.8427    1.3365   </span></span>
-<span><span class="co">#&gt; X2 1.1474    0.8716     0.9258    1.4219   </span></span>
-<span><span class="co">#&gt; X3 1.0022    0.9978     0.7923    1.2677   </span></span>
-<span><span class="co">#&gt; X4 1.0668    0.9374     0.8375    1.3590</span></span></code></pre></div>
+<span><span class="co">#&gt; X1 1.0547    0.9481     0.8526    1.3048   </span></span>
+<span><span class="co">#&gt; X2 1.1400    0.8772     0.9249    1.4050   </span></span>
+<span><span class="co">#&gt; X3 1.0021    0.9979     0.7984    1.2578   </span></span>
+<span><span class="co">#&gt; X4 1.0627    0.9410     0.8463    1.3345</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="global-learning">Global Learning<a class="anchor" aria-label="anchor" href="#global-learning"></a>
@@ -113,17 +113,17 @@ approaches for survival analysis.</p>
 <span><span class="co">#&gt;   n=500, number of events=422</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt;       coef exp(coef) se(coef)     z Pr(&gt;|z|)    </span></span>
-<span><span class="co">#&gt; X1 0.08670   1.09057  0.04759 1.822 0.068455 .  </span></span>
-<span><span class="co">#&gt; X2 0.18949   1.20863  0.05004 3.787 0.000153 ***</span></span>
-<span><span class="co">#&gt; X3 0.19417   1.21430  0.05302 3.662 0.000250 ***</span></span>
-<span><span class="co">#&gt; X4 0.14162   1.15213  0.04860 2.914 0.003570 ** </span></span>
+<span><span class="co">#&gt; X1 0.08777   1.09173  0.04847 1.811 0.070182 .  </span></span>
+<span><span class="co">#&gt; X2 0.18851   1.20745  0.04991 3.777 0.000159 ***</span></span>
+<span><span class="co">#&gt; X3 0.18674   1.20532  0.05117 3.650 0.000263 ***</span></span>
+<span><span class="co">#&gt; X4 0.13231   1.14147  0.04542 2.913 0.003581 ** </span></span>
 <span><span class="co">#&gt; ---</span></span>
 <span><span class="co">#&gt; Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1</span></span>
 <span><span class="co">#&gt;    exp(coef) exp(-coef) lower .95 upper .95</span></span>
-<span><span class="co">#&gt; X1 1.0906    0.9169     0.9935    1.1972   </span></span>
-<span><span class="co">#&gt; X2 1.2086    0.8274     1.0957    1.3332   </span></span>
-<span><span class="co">#&gt; X3 1.2143    0.8235     1.0945    1.3473   </span></span>
-<span><span class="co">#&gt; X4 1.1521    0.8680     1.0475    1.2673</span></span></code></pre></div>
+<span><span class="co">#&gt; X1 1.0917    0.9160     0.9928    1.2005   </span></span>
+<span><span class="co">#&gt; X2 1.2075    0.8282     1.0949    1.3315   </span></span>
+<span><span class="co">#&gt; X3 1.2053    0.8297     1.0903    1.3325   </span></span>
+<span><span class="co">#&gt; X4 1.1415    0.8761     1.0442    1.2478</span></span></code></pre></div>
 <div class="section level3">
 <h3 id="stratified-learning">Stratified Learning<a class="anchor" aria-label="anchor" href="#stratified-learning"></a>
 </h3>
@@ -138,17 +138,17 @@ approaches for survival analysis.</p>
 <span><span class="co">#&gt;   n=500, number of events=422</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt;       coef exp(coef) se(coef)     z Pr(&gt;|z|)    </span></span>
-<span><span class="co">#&gt; X1 0.04232   1.04323  0.05288 0.800 0.423529    </span></span>
-<span><span class="co">#&gt; X2 0.08623   1.09006  0.05461 1.579 0.114362    </span></span>
-<span><span class="co">#&gt; X3 0.20676   1.22969  0.05469 3.780 0.000157 ***</span></span>
-<span><span class="co">#&gt; X4 0.14109   1.15153  0.04930 2.862 0.004209 ** </span></span>
+<span><span class="co">#&gt; X1 0.04284   1.04377  0.05381 0.796 0.425969    </span></span>
+<span><span class="co">#&gt; X2 0.08578   1.08957  0.05461 1.571 0.116210    </span></span>
+<span><span class="co">#&gt; X3 0.19885   1.22000  0.05272 3.772 0.000162 ***</span></span>
+<span><span class="co">#&gt; X4 0.13182   1.14091  0.04603 2.864 0.004189 ** </span></span>
 <span><span class="co">#&gt; ---</span></span>
 <span><span class="co">#&gt; Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1</span></span>
 <span><span class="co">#&gt;    exp(coef) exp(-coef) lower .95 upper .95</span></span>
-<span><span class="co">#&gt; X1 1.0432    0.9586     0.9405    1.1572   </span></span>
-<span><span class="co">#&gt; X2 1.0901    0.9174     0.9794    1.2132   </span></span>
-<span><span class="co">#&gt; X3 1.2297    0.8132     1.1047    1.3688   </span></span>
-<span><span class="co">#&gt; X4 1.1515    0.8684     1.0455    1.2683</span></span></code></pre></div>
+<span><span class="co">#&gt; X1 1.0438    0.9581     0.9393    1.1599   </span></span>
+<span><span class="co">#&gt; X2 1.0896    0.9178     0.9790    1.2127   </span></span>
+<span><span class="co">#&gt; X3 1.2200    0.8197     1.1002    1.3528   </span></span>
+<span><span class="co">#&gt; X4 1.1409    0.8765     1.0425    1.2486</span></span></code></pre></div>
 </div>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

@@ -71,35 +71,36 @@
 <p>This is a basic example showing how to transfer survival information from multiple source domains to a target domain using the Cox proportional hazards model:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/SignorinoY/survtrans" class="external-link">survtrans</a></span><span class="op">)</span></span>
-<span><span class="va">formula</span> <span class="op">&lt;-</span> <span class="fu">survival</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/survival/man/Surv.html" class="external-link">Surv</a></span><span class="op">(</span><span class="va">time</span>, <span class="va">status</span><span class="op">)</span> <span class="op">~</span> <span class="va">.</span> <span class="op">-</span> <span class="va">group</span> <span class="op">-</span> <span class="va">id</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://ggplot2.tidyverse.org" class="external-link">ggplot2</a></span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">formula</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/survival/man/Surv.html" class="external-link">Surv</a></span><span class="op">(</span><span class="va">time</span>, <span class="va">status</span><span class="op">)</span> <span class="op">~</span> <span class="va">.</span> <span class="op">-</span> <span class="va">group</span> <span class="op">-</span> <span class="va">id</span></span>
 <span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/coxtrans.html">coxtrans</a></span><span class="op">(</span></span>
 <span>  <span class="va">formula</span>, <span class="va">sim2</span>, <span class="va">sim2</span><span class="op">$</span><span class="va">group</span>, <span class="fl">1</span>,</span>
 <span>  lambda1 <span class="op">=</span> <span class="fl">0.075</span>, lambda2 <span class="op">=</span> <span class="fl">0.04</span>, lambda3 <span class="op">=</span> <span class="fl">0.04</span>, penalty <span class="op">=</span> <span class="st">"SCAD"</span></span>
 <span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Call:</span></span>
-<span><span class="co">#&gt; coxtrans(formula = formula, data = sim2, group = sim2$group, </span></span>
-<span><span class="co">#&gt;     target = 1, lambda1 = 0.075, lambda2 = 0.04, lambda3 = 0.04, </span></span>
+<span><span class="co">#&gt; coxtrans(formula = formula, data = sim2, group = sim2$group,</span></span>
+<span><span class="co">#&gt;     target = 1, lambda1 = 0.075, lambda2 = 0.04, lambda3 = 0.04,</span></span>
 <span><span class="co">#&gt;     penalty = "SCAD")</span></span>
-<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;</span></span>
 <span><span class="co">#&gt;   n=500, number of events=422</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;       coef exp(coef) se(coef)     z Pr(&gt;|z|)    </span></span>
-<span><span class="co">#&gt; X1 0.35052   1.41981  0.05366 6.533 6.47e-11 ***</span></span>
-<span><span class="co">#&gt; X2 0.35914   1.43209  0.05424 6.621 3.56e-11 ***</span></span>
-<span><span class="co">#&gt; X3 0.34485   1.41178  0.05431 6.350 2.15e-10 ***</span></span>
-<span><span class="co">#&gt; X4 0.32870   1.38916  0.05190 6.333 2.40e-10 ***</span></span>
+<span><span class="co">#&gt;</span></span>
+<span><span class="co">#&gt;       coef exp(coef) se(coef)     z Pr(&gt;|z|)</span></span>
+<span><span class="co">#&gt; X1 0.33676   1.40040  0.05341 6.306 2.87e-10 ***</span></span>
+<span><span class="co">#&gt; X2 0.35968   1.43287  0.05402 6.659 2.76e-11 ***</span></span>
+<span><span class="co">#&gt; X3 0.34368   1.41012  0.05398 6.367 1.93e-10 ***</span></span>
+<span><span class="co">#&gt; X4 0.32553   1.38476  0.05157 6.313 2.75e-10 ***</span></span>
 <span><span class="co">#&gt; ---</span></span>
 <span><span class="co">#&gt; Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1</span></span>
 <span><span class="co">#&gt;    exp(coef) exp(-coef) lower .95 upper .95</span></span>
-<span><span class="co">#&gt; X1 1.4198    0.7043     1.2781    1.5773   </span></span>
-<span><span class="co">#&gt; X2 1.4321    0.6983     1.2877    1.5927   </span></span>
-<span><span class="co">#&gt; X3 1.4118    0.7083     1.2692    1.5703   </span></span>
-<span><span class="co">#&gt; X4 1.3892    0.7199     1.2548    1.5379</span></span></code></pre></div>
+<span><span class="co">#&gt; X1 1.4004    0.7141     1.2612    1.5549</span></span>
+<span><span class="co">#&gt; X2 1.4329    0.6979     1.2889    1.5929</span></span>
+<span><span class="co">#&gt; X3 1.4101    0.7092     1.2686    1.5675</span></span>
+<span><span class="co">#&gt; X4 1.3848    0.7221     1.2516    1.5320</span></span></code></pre></div>
 <p>You can also plot the estimated cumulative baseline hazard function and compare it to the true function:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://ggplot2.tidyverse.org" class="external-link">ggplot2</a></span><span class="op">)</span></span>
-<span><span class="va">basehaz_pred</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/basehaz.html">basehaz</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">basehaz_pred</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/basehaz.html">basehaz</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
 <span><span class="va">basehaz_pred</span><span class="op">$</span><span class="va">color</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/ifelse.html" class="external-link">ifelse</a></span><span class="op">(</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="va">basehaz_pred</span><span class="op">$</span><span class="va">strata</span><span class="op">)</span> <span class="op"><a href="https://rdrr.io/r/base/Arithmetic.html" class="external-link">%%</a></span> <span class="fl">2</span> <span class="op">==</span> <span class="fl">0</span>, <span class="st">"Group 2"</span>, <span class="st">"Group 1"</span></span>
 <span><span class="op">)</span></span>

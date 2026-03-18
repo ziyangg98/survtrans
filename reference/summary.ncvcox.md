@@ -41,10 +41,6 @@ An object of class `summary.ncvcox`, with the following components:
 
   The log partial likelihood at the final value.
 
-- `BIC`:
-
-  The Bayesian Information Criterion at the final value.
-
 - `coefficients`:
 
   A matrix with one row for each coefficient, and columns containing the

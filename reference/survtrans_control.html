@@ -42,7 +42,13 @@
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">survtrans_control</span><span class="op">(</span>abstol <span class="op">=</span> <span class="fl">1e-04</span>, reltol <span class="op">=</span> <span class="fl">0.001</span>, maxit <span class="op">=</span> <span class="fl">300</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">survtrans_control</span><span class="op">(</span></span>
+<span>  abstol <span class="op">=</span> <span class="fl">1e-04</span>,</span>
+<span>  reltol <span class="op">=</span> <span class="fl">0.001</span>,</span>
+<span>  fdev <span class="op">=</span> <span class="fl">1e-05</span>,</span>
+<span>  maxit <span class="op">=</span> <span class="fl">300</span>,</span>
+<span>  verbose <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -50,13 +56,21 @@
 
 
 <dl><dt id="arg-abstol">abstol<a class="anchor" aria-label="anchor" href="#arg-abstol"></a></dt>
-<dd><p>the absolute tolerance for the proposed algorithm.
+<dd><p>the absolute tolerance for ADMM primal/dual residuals.
 Default is 1e-4.</p></dd>
 
 
 <dt id="arg-reltol">reltol<a class="anchor" aria-label="anchor" href="#arg-reltol"></a></dt>
-<dd><p>the relative tolerance for the proposed algorithm.
+<dd><p>the relative tolerance for ADMM primal/dual residuals.
 Default is 1e-3.</p></dd>
+
+
+<dt id="arg-fdev">fdev<a class="anchor" aria-label="anchor" href="#arg-fdev"></a></dt>
+<dd><p>the minimum fractional change of the augmented Lagrangian for
+convergence. The algorithm stops when
+\(|L^{k} - L^{k-1}| / (|L^{k-1}| + 1) &lt; fdev\), where \(L\) is the
+augmented Lagrangian. This provides a fallback when primal-dual residuals
+oscillate under non-convex penalties. Default is 1e-5.</p></dd>
 
 
 <dt id="arg-maxit">maxit<a class="anchor" aria-label="anchor" href="#arg-maxit"></a></dt>
@@ -71,7 +85,7 @@ during the fitting process. Default is <code>FALSE</code>.</p></dd>
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>A list with components <code>abstol</code>, <code>reltol</code>,
+    <p>A list with components <code>abstol</code>, <code>reltol</code>, <code>fdev</code>,
 <code>maxit</code>, and <code>verbose</code>.</p>
     </div>
 

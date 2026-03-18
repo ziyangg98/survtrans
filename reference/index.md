@@ -12,11 +12,6 @@
 
   Log-likelihood for a `coxtrans` object
 
-- [`BIC(`*`<coxtrans>`*`)`](http://gongziyang.com/survtrans/reference/BIC.coxtrans.md)
-  :
-
-  BIC for a `coxtrans` object
-
 - [`coef(`*`<coxtrans>`*`)`](http://gongziyang.com/survtrans/reference/coef.coxtrans.md)
   :
 
@@ -71,11 +66,6 @@
 
   Log-likelihood for a `ncvcox` object
 
-- [`BIC(`*`<ncvcox>`*`)`](http://gongziyang.com/survtrans/reference/BIC.ncvcox.md)
-  :
-
-  BIC for a `ncvcox` object
-
 - [`coef(`*`<ncvcox>`*`)`](http://gongziyang.com/survtrans/reference/coef.ncvcox.md)
   :
 
@@ -108,10 +98,6 @@
 
 - [`diagnose()`](http://gongziyang.com/survtrans/reference/diagnose.md)
   : Generic function for diagnose
-
-- [`penalty()`](http://gongziyang.com/survtrans/reference/penalty.md) :
-  Compute penalty for a numeric vector using specified regularization
-  type.
 
 - [`preprocess()`](http://gongziyang.com/survtrans/reference/preprocess.md)
   : Preprocess Survival Data

@@ -1,5 +1,6 @@
 <urlset xmlns = 'http://www.sitemaps.org/schemas/sitemap/0.9'>
 <url><loc>http://gongziyang.com/survtrans/404.html</loc></url>
+<url><loc>http://gongziyang.com/survtrans/CLAUDE.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/CODE_OF_CONDUCT.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/CONTRIBUTING.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/LICENSE-text.html</loc></url>
@@ -9,8 +10,6 @@
 <url><loc>http://gongziyang.com/survtrans/articles/reviews.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/authors.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/index.html</loc></url>
-<url><loc>http://gongziyang.com/survtrans/reference/BIC.coxtrans.html</loc></url>
-<url><loc>http://gongziyang.com/survtrans/reference/BIC.ncvcox.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/basehaz.coxtrans.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/basehaz.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/basehaz.ncvcox.html</loc></url>
@@ -24,12 +23,13 @@
 <url><loc>http://gongziyang.com/survtrans/reference/logLik.coxtrans.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/logLik.ncvcox.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/ncvcox.html</loc></url>
-<url><loc>http://gongziyang.com/survtrans/reference/penalty.html</loc></url>
+<url><loc>http://gongziyang.com/survtrans/reference/penalty_value.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/predict.coxtrans.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/predict.ncvcox.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/preprocess.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/print.summary.coxtrans.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/print.summary.ncvcox.html</loc></url>
+<url><loc>http://gongziyang.com/survtrans/reference/reexports.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/sim2.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/simsurv_tl.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/summary.coxtrans.html</loc></url>

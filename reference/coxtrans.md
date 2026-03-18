@@ -15,9 +15,7 @@ coxtrans(
   lambda3 = 0,
   penalty = c("lasso", "MCP", "SCAD"),
   gamma = switch(penalty, SCAD = 3.7, MCP = 3, 1),
-  rho = 2,
-  tau = 10,
-  init,
+  vartheta = 1,
   control,
   ...
 )
@@ -68,20 +66,12 @@ coxtrans(
   A non-negative value specifying the penalty parameter. The default is
   3.7 for SCAD and 3.0 for MCP.
 
-- rho:
+- vartheta:
 
-  A value larger than 1 specifying the increase/decrease factor for the
-  augmented Lagrangian's penalty parameter. The default is 2.0.
-
-- tau:
-
-  A value larger than 1 specifying the tolerance for the trade-off
-  between the primal and dual residuals. The default is 10.0.
-
-- init:
-
-  A numeric vector of initial values for the coefficients. The default
-  is a zero vector.
+  A positive value specifying the fixed penalty parameter in the
+  augmented Lagrangian. Following Wang, Yin & Zeng (2019), this is kept
+  constant (not adaptive) to guarantee convergence with non-convex
+  penalties. The default is 1.0.
 
 - control:
 
@@ -101,7 +91,7 @@ An object of class `coxtrans`.
 ## Examples
 
 ``` r
-formula <- survival::Surv(time, status) ~ . - group - id
+formula <- Surv(time, status) ~ . - group - id
 fit <- coxtrans(
   formula, sim2, sim2$group, 1,
   lambda1 = 0.075, lambda2 = 0.04, lambda3 = 0.04, penalty = "SCAD"
@@ -115,15 +105,15 @@ summary(fit)
 #>   n=500, number of events=422
 #> 
 #>       coef exp(coef) se(coef)     z Pr(>|z|)    
-#> X1 0.35052   1.41981  0.05366 6.533 6.47e-11 ***
-#> X2 0.35914   1.43209  0.05424 6.621 3.56e-11 ***
-#> X3 0.34485   1.41178  0.05431 6.350 2.15e-10 ***
-#> X4 0.32870   1.38916  0.05190 6.333 2.40e-10 ***
+#> X1 0.33676   1.40040  0.05341 6.306 2.87e-10 ***
+#> X2 0.35968   1.43287  0.05402 6.659 2.76e-11 ***
+#> X3 0.34368   1.41012  0.05398 6.367 1.93e-10 ***
+#> X4 0.32553   1.38476  0.05157 6.313 2.75e-10 ***
 #> ---
 #> Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
 #>    exp(coef) exp(-coef) lower .95 upper .95
-#> X1 1.4198    0.7043     1.2781    1.5773   
-#> X2 1.4321    0.6983     1.2877    1.5927   
-#> X3 1.4118    0.7083     1.2692    1.5703   
-#> X4 1.3892    0.7199     1.2548    1.5379   
+#> X1 1.4004    0.7141     1.2612    1.5549   
+#> X2 1.4329    0.6979     1.2889    1.5929   
+#> X3 1.4101    0.7092     1.2686    1.5675   
+#> X4 1.3848    0.7221     1.2516    1.5320   
 ```

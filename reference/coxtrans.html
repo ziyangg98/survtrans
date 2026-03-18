@@ -52,9 +52,7 @@
 <span>  lambda3 <span class="op">=</span> <span class="fl">0</span>,</span>
 <span>  penalty <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"lasso"</span>, <span class="st">"MCP"</span>, <span class="st">"SCAD"</span><span class="op">)</span>,</span>
 <span>  gamma <span class="op">=</span> <span class="kw"><a href="https://rdrr.io/r/base/switch.html" class="external-link">switch</a></span><span class="op">(</span><span class="va">penalty</span>, SCAD <span class="op">=</span> <span class="fl">3.7</span>, MCP <span class="op">=</span> <span class="fl">3</span>, <span class="fl">1</span><span class="op">)</span>,</span>
-<span>  rho <span class="op">=</span> <span class="fl">2</span>,</span>
-<span>  tau <span class="op">=</span> <span class="fl">10</span>,</span>
-<span>  <span class="va">init</span>,</span>
+<span>  vartheta <span class="op">=</span> <span class="fl">1</span>,</span>
 <span>  <span class="va">control</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -107,19 +105,11 @@ default is "lasso". Other options are "MCP" and "SCAD".</p></dd>
 default is 3.7 for SCAD and 3.0 for MCP.</p></dd>
 
 
-<dt id="arg-rho">rho<a class="anchor" aria-label="anchor" href="#arg-rho"></a></dt>
-<dd><p>A value larger than 1 specifying the increase/decrease factor
-for the augmented Lagrangian's penalty parameter. The default is 2.0.</p></dd>
-
-
-<dt id="arg-tau">tau<a class="anchor" aria-label="anchor" href="#arg-tau"></a></dt>
-<dd><p>A value larger than 1 specifying the tolerance for the
-trade-off between the primal and dual residuals. The default is 10.0.</p></dd>
-
-
-<dt id="arg-init">init<a class="anchor" aria-label="anchor" href="#arg-init"></a></dt>
-<dd><p>A numeric vector of initial values for the coefficients. The
-default is a zero vector.</p></dd>
+<dt id="arg-vartheta">vartheta<a class="anchor" aria-label="anchor" href="#arg-vartheta"></a></dt>
+<dd><p>A positive value specifying the fixed penalty parameter in
+the augmented Lagrangian. Following Wang, Yin &amp; Zeng (2019), this is kept
+constant (not adaptive) to guarantee convergence with non-convex penalties.
+The default is 1.0.</p></dd>
 
 
 <dt id="arg-control">control<a class="anchor" aria-label="anchor" href="#arg-control"></a></dt>
@@ -139,7 +129,7 @@ parameters for the fitting algorithm. Default is
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="va">formula</span> <span class="op">&lt;-</span> <span class="fu">survival</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/survival/man/Surv.html" class="external-link">Surv</a></span><span class="op">(</span><span class="va">time</span>, <span class="va">status</span><span class="op">)</span> <span class="op">~</span> <span class="va">.</span> <span class="op">-</span> <span class="va">group</span> <span class="op">-</span> <span class="va">id</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="va">formula</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/survival/man/Surv.html" class="external-link">Surv</a></span><span class="op">(</span><span class="va">time</span>, <span class="va">status</span><span class="op">)</span> <span class="op">~</span> <span class="va">.</span> <span class="op">-</span> <span class="va">group</span> <span class="op">-</span> <span class="va">id</span></span></span>
 <span class="r-in"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu">coxtrans</span><span class="op">(</span></span></span>
 <span class="r-in"><span>  <span class="va">formula</span>, <span class="va">sim2</span>, <span class="va">sim2</span><span class="op">$</span><span class="va">group</span>, <span class="fl">1</span>,</span></span>
 <span class="r-in"><span>  lambda1 <span class="op">=</span> <span class="fl">0.075</span>, lambda2 <span class="op">=</span> <span class="fl">0.04</span>, lambda3 <span class="op">=</span> <span class="fl">0.04</span>, penalty <span class="op">=</span> <span class="st">"SCAD"</span></span></span>
@@ -153,17 +143,17 @@ parameters for the fitting algorithm. Default is
 <span class="r-out co"><span class="r-pr">#&gt;</span>   n=500, number of events=422</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>       coef exp(coef) se(coef)     z Pr(&gt;|z|)    </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X1 0.35052   1.41981  0.05366 6.533 6.47e-11 ***</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X2 0.35914   1.43209  0.05424 6.621 3.56e-11 ***</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X3 0.34485   1.41178  0.05431 6.350 2.15e-10 ***</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X4 0.32870   1.38916  0.05190 6.333 2.40e-10 ***</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X1 0.33676   1.40040  0.05341 6.306 2.87e-10 ***</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X2 0.35968   1.43287  0.05402 6.659 2.76e-11 ***</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X3 0.34368   1.41012  0.05398 6.367 1.93e-10 ***</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X4 0.32553   1.38476  0.05157 6.313 2.75e-10 ***</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> ---</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    exp(coef) exp(-coef) lower .95 upper .95</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X1 1.4198    0.7043     1.2781    1.5773   </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X2 1.4321    0.6983     1.2877    1.5927   </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X3 1.4118    0.7083     1.2692    1.5703   </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X4 1.3892    0.7199     1.2548    1.5379   </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X1 1.4004    0.7141     1.2612    1.5549   </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X2 1.4329    0.6979     1.2889    1.5929   </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X3 1.4101    0.7092     1.2686    1.5675   </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X4 1.3848    0.7221     1.2516    1.5320   </span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
