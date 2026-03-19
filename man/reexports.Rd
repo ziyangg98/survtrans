@@ -13,4 +13,3 @@ below to see their documentation.
 \describe{
   \item{survival}{\code{\link[survival]{Surv}}}
 }}
-
