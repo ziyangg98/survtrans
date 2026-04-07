@@ -202,6 +202,8 @@ calc_lambda_max <- function(formula, data, group, offset) {
 #' @param n_samples A vector of length K specifying the number of samples per
 #' group, or a single number specifying the total number of samples.
 #' @param seed An integer specifying the random seed, with a default value of 0.
+#' @param sigma An optional p x p covariance matrix for the covariates. If
+#' \code{NULL} (default), an identity matrix is used.
 #'
 #' @return A data frame with columns "id", "group", "X1", "X2", ..., "Xp",
 #' "time", and "status".
@@ -219,7 +221,7 @@ calc_lambda_max <- function(formula, data, group, offset) {
 #' df <- simsurv_tl(beta, eta, lambda, gamma, dist, maxt, n_samples)
 #' df
 simsurv_tl <- function(
-  beta, eta, lambda, gamma, dist, maxt, n_samples, seed = 0
+  beta, eta, lambda, gamma, dist, maxt, n_samples, seed = 0, sigma = NULL
 ) {
   set.seed(seed)
   n_groups <- ncol(eta)
@@ -227,7 +229,7 @@ simsurv_tl <- function(
   names(beta) <- stringr::str_c("X", seq_len(n_features))
   if (length(n_samples) == 1) n_samples <- rep(n_samples, n_groups)
   mu <- rep(0, n_features)
-  sigma <- diag(n_features)
+  if (is.null(sigma)) sigma <- diag(n_features)
   covs <- c()
   times <- c()
   for (k in 1:n_groups) {

@@ -4,7 +4,17 @@
 \alias{simsurv_tl}
 \title{Simulate survival data for a multi-source Cox model}
 \usage{
-simsurv_tl(beta, eta, lambda, gamma, dist, maxt, n_samples, seed = 0)
+simsurv_tl(
+  beta,
+  eta,
+  lambda,
+  gamma,
+  dist,
+  maxt,
+  n_samples,
+  seed = 0,
+  sigma = NULL
+)
 }
 \arguments{
 \item{beta}{A vector of length p representing the common coefficients,
@@ -28,6 +38,9 @@ either "exponential", "weibull", or "gompertz".}
 group, or a single number specifying the total number of samples.}
 
 \item{seed}{An integer specifying the random seed, with a default value of 0.}
+
+\item{sigma}{An optional p x p covariance matrix for the covariates. If
+\code{NULL} (default), an identity matrix is used.}
 }
 \value{
 A data frame with columns "id", "group", "X1", "X2", ..., "Xp",
