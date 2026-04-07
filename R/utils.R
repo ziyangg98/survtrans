@@ -267,7 +267,7 @@ calc_offset <- function(theta, n_features, n_groups, x_by_group,
   offset <- numeric(sum(lengths(stacked_group_idxs)))
   for (k in seq_len(n_groups)) {
     offset[stacked_group_idxs[[k]]] <-
-      x_by_group[[k]] %*% (theta_mat[, k] + theta_mat[, n_groups + 1])
+      x_by_group[[k]] %*% theta_mat[, k]
   }
   offset
 }
@@ -290,49 +290,63 @@ block_diag <- function(blocks) {
 }
 
 #' @importFrom utils head
-build_link_matrix <- function(coefficients) {
-  stopifnot(is.matrix(coefficients), ncol(coefficients) >= 2)
-  n_groups <- ncol(coefficients) - 1L
+build_link_matrix <- function(coefficients, active_local = NULL,
+                              active_prior = NULL, prior_matrix = NULL) {
+  stopifnot(is.matrix(coefficients), ncol(coefficients) >= 1)
+  n_groups <- ncol(coefficients)
   n_features <- nrow(coefficients)
-  beta <- coefficients[, 1:n_groups, drop = FALSE] +
-    coefficients[, n_groups + 1L]
 
-  phi_list <- lapply(
-    seq_len(n_features),
-    function(j) unique(beta[j, ])
-  )
-  n_unique <- lengths(phi_list)
-  n_phi_total <- sum(n_unique)
+  # For each feature, determine unique free parameters (from sources only
+  # when prior is active, since target is then a derived quantity)
+  phi_list <- vector("list", n_features)
+  # Track whether target is free or constrained by prior for each feature
+  target_constrained <- logical(n_features)
 
-  is_global <- coefficients[, 1L] == 0
-  offsets <- c(0L, head(cumsum(n_unique), -1L))
+  has_prior <- !is.null(active_prior) && !is.null(prior_matrix)
 
-  total_nz <- n_groups * n_features
-  i_idx <- integer(total_nz)
-  j_idx <- integer(total_nz)
-  ctr <- 1L
-
-  for (k in seq_len(n_groups)) {
-    for (j in seq_len(n_features)) {
-      i_idx[ctr] <- (k - 1L) * n_features + j
-      pos <- which.min(abs(beta[j, k] - phi_list[[j]]))
-      j_idx[ctr] <- offsets[j] + pos
-      ctr <- ctr + 1L
+  for (j in seq_len(n_features)) {
+    if (has_prior && any(active_prior[j, ])) {
+      # Target is constrained: free params are unique source values only
+      target_constrained[j] <- TRUE
+      phi_list[[j]] <- unique(coefficients[j, -1])
+    } else {
+      # Target is free: all groups contribute unique values
+      target_constrained[j] <- FALSE
+      phi_list[[j]] <- unique(coefficients[j, ])
     }
   }
-  link_local <- matrix(0, n_groups * n_features, n_phi_total)
-  link_local[cbind(i_idx, j_idx)] <- 1
 
-  link_global_blocks <- lapply(seq_len(n_features), function(j) {
-    m <- n_unique[j]
-    if (is_global[j] && m > 1L) {
-      rbind(
-        rep(1 / (m - 1L), m - 1L),
-        diag(m - 1L)
-      )
+  n_unique <- lengths(phi_list)
+  n_phi_total <- sum(n_unique)
+  offsets <- c(0L, head(cumsum(n_unique), -1L))
+
+  # Build link matrix (n_groups * n_features) x n_phi_total
+  link <- matrix(0, n_groups * n_features, n_phi_total)
+
+  for (j in seq_len(n_features)) {
+    if (target_constrained[j]) {
+      # Sources map to their unique values (0/1)
+      for (k in 2:n_groups) {
+        row <- (k - 1L) * n_features + j
+        pos <- which.min(abs(coefficients[j, k] - phi_list[[j]]))
+        link[row, offsets[j] + pos] <- 1
+      }
+      # Target row: weighted combination of source unique values
+      # β₀ = Σ w_i β_i, use first active prior's weights
+      g_active <- which(active_prior[j, ])[1]
+      w <- prior_matrix[g_active, ]
+      for (i in seq_len(n_groups - 1)) {
+        pos <- which.min(abs(coefficients[j, i + 1] - phi_list[[j]]))
+        link[j, offsets[j] + pos] <- link[j, offsets[j] + pos] + w[i]
+      }
     } else {
-      diag(m)
+      # All groups map to unique values (0/1)
+      for (k in seq_len(n_groups)) {
+        row <- (k - 1L) * n_features + j
+        pos <- which.min(abs(coefficients[j, k] - phi_list[[j]]))
+        link[row, offsets[j] + pos] <- 1
+      }
     }
-  })
-  link_local %*% block_diag(link_global_blocks)
+  }
+  link
 }

@@ -22,7 +22,11 @@ knitr::opts_chunk$set(
 [![Codecov test coverage](https://codecov.io/gh/ziyangg98/survtrans/graph/badge.svg)](https://app.codecov.io/gh/ziyangg98/survtrans)
 <!-- badges: end -->
 
-The goal of **survtrans** is to provide a framework for transferring survival information from source domain(s) to a target domain. The package currently supports the Cox proportional hazards model with both global and local transfer learning.
+**survtrans** provides transfer learning for survival analysis using Cox proportional hazards models. It transfers survival information from source domain(s) to a target domain with three-layer penalization:
+
+- **Sparse** (lambda1): variable selection on target coefficients
+- **Local** (lambda2): shrinks source-target coefficient differences, encouraging shared effects
+- **Prior transfer** (lambda3): incorporates prior knowledge about which source groups are informative via a customizable weight matrix
 
 ## Installation
 
@@ -35,11 +39,10 @@ pak::pak("ziyangg98/survtrans")
 
 ## Example
 
-This is a basic example showing how to transfer survival information from multiple source domains to a target domain using the Cox proportional hazards model:
+Fit a transfer learning Cox model on simulated data with 5 groups (1 target + 4 sources, 20 features, true support on X1--X4):
 
 ```{r example}
 library(survtrans)
-library(ggplot2)
 
 formula <- Surv(time, status) ~ . - group - id
 fit <- coxtrans(
@@ -49,9 +52,47 @@ fit <- coxtrans(
 summary(fit)
 ```
 
-You can also plot the estimated cumulative baseline hazard function and compare it to the true function:
+The model correctly identifies the three-layer structure: X1 and X2 are transferred via the prior constraint, X3 and X4 are shared across all groups via local shrinkage, and X5--X20 are sparse (zero).
+
+### Custom prior matrix
+
+When source groups have known structure (e.g., tissue type), you can define a prior matrix to encode which sources are informative for the target:
+
+```{r prior}
+pm <- rbind(
+  tissue_A = c(0.5, 0.5, 0, 0),
+  tissue_B = c(0, 0, 0.5, 0.5)
+)
+colnames(pm) <- c("2", "3", "4", "5")
+
+fit2 <- coxtrans(
+  formula, sim2, sim2$group, 1,
+  lambda1 = 0.075, lambda2 = 0.04, lambda3 = c(0.04, 0.04),
+  prior_matrix = pm, penalty = "SCAD"
+)
+summary(fit2)
+```
+
+### Automatic tuning with cross-validation
+
+Use `cv.coxtrans()` to automatically select lambda parameters via
+coordinate-wise cross-validation with the 1-SE rule:
+
+```{r cv, eval = FALSE}
+cv_fit <- cv.coxtrans(
+  formula, sim2, sim2$group,
+  target = 1,
+  penalty = "SCAD", ncores = 4
+)
+summary(cv_fit$fit)
+cv_fit$best_lambdas
+```
+
+### Baseline hazard
 
 ```{r, basehaz, fig.alt = "Estimated vs. True Cumulative Baseline Hazard Function"}
+library(ggplot2)
+
 basehaz_pred <- basehaz(fit)
 basehaz_pred$color <- ifelse(
   as.numeric(basehaz_pred$strata) %% 2 == 0, "Group 2", "Group 1"

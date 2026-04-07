@@ -2,7 +2,7 @@
 % Please edit documentation in R/coxtrans.R
 \name{coxtrans}
 \alias{coxtrans}
-\title{Transfer Learning for Cox Model with Global and Local Shrinkage}
+\title{Transfer Learning Cox Model with Prior Constraints}
 \usage{
 coxtrans(
   formula,
@@ -12,6 +12,7 @@ coxtrans(
   lambda1 = 0,
   lambda2 = 0,
   lambda3 = 0,
+  prior_matrix = NULL,
   penalty = c("lasso", "MCP", "SCAD"),
   gamma = switch(penalty, SCAD = 3.7, MCP = 3, 1),
   vartheta = 1,
@@ -20,53 +21,79 @@ coxtrans(
 )
 }
 \arguments{
-\item{formula}{A formula object, with the response on the left of a \code{~}
-operator, and the terms on the right. The response must be a survival object
-as returned by the Surv function.}
+\item{formula}{A formula with a \code{\link[survival]{Surv}} response.}
 
 \item{data}{A data frame containing the variables in the model.}
 
-\item{group}{A factor variable indicating the group of each observation.}
+\item{group}{A factor indicating the group of each observation.}
 
-\item{target}{A character string specifying the target group.}
+\item{target}{The target group level.}
 
-\item{lambda1}{A non-negative value specifying the sparse penalty parameter.
-The default is 0.}
+\item{lambda1}{Sparse penalty (non-negative scalar). Default 0.}
 
-\item{lambda2}{A non-negative value specifying the global biased penalty
-parameter. The default is 0.}
+\item{lambda2}{Local penalty for source-target coefficient differences
+(non-negative scalar). Default 0.}
 
-\item{lambda3}{A non-negative value specifying the local biased penalty
-parameter. The default is 0.}
+\item{lambda3}{Prior transfer penalty (non-negative scalar or vector of
+length G). When \code{prior_matrix} has G rows, \code{lambda3} should
+have length G; a scalar is recycled. Default 0.}
 
-\item{penalty}{A character string specifying the penalty function. The
-default is "lasso". Other options are "MCP" and "SCAD".}
+\item{prior_matrix}{Optional G x (K-1) weight matrix defining transfer
+constraints. Each row specifies a weighted combination of source
+coefficients that the target should be close to. If \code{NULL},
+a single prior using sample-weighted source means is used.}
 
-\item{gamma}{A non-negative value specifying the penalty parameter. The
-default is 3.7 for SCAD and 3.0 for MCP.}
+\item{penalty}{Penalty type: \code{"lasso"}, \code{"MCP"}, or
+\code{"SCAD"}.}
 
-\item{vartheta}{A positive value specifying the fixed penalty parameter in
-the augmented Lagrangian. Following Wang, Yin & Zeng (2019), this is kept
-constant (not adaptive) to guarantee convergence with non-convex penalties.
-The default is 1.0.}
+\item{gamma}{Concavity parameter for MCP/SCAD. Default 3.7 (SCAD) or
+3.0 (MCP).}
 
-\item{control}{An object of class \link{survtrans_control} containing control
-parameters for the fitting algorithm. Default is
-\code{survtrans_control(...)}.}
+\item{vartheta}{Fixed augmented Lagrangian parameter. Default 1.0.}
 
-\item{...}{Additional arguments to be passed to the fitting algorithm.}
+\item{control}{A \link{survtrans_control} object.}
+
+\item{...}{Additional arguments passed to \code{survtrans_control}.}
 }
 \value{
-An object of class \code{coxtrans}.
+An object of class \code{coxtrans} with components:
+\item{coefficients}{Matrix (p x K) of group-specific coefficients.
+Each column is the full beta for that group (target first).}
+\item{prior_matrix}{The prior weight matrix used.}
+\item{prior_effects}{Matrix of prior constraint residuals.}
+\item{active_local}{Logical matrix (p x K-1) of active local
+constraints.}
+\item{active_prior}{Logical matrix (p x G) of active prior
+constraints.}
+\item{iter}{Number of ADMM iterations.}
+\item{message}{Convergence message.}
+\item{history}{Matrix of per-iteration diagnostics.}
 }
 \description{
-Transfer Learning for Cox Model with Global and Local Shrinkage
+Fits a Cox proportional hazards model that transfers survival information
+from source domains to a target domain using three-layer penalization:
+sparse (lambda1), local sharing (lambda2), and prior transfer (lambda3).
 }
 \examples{
 formula <- Surv(time, status) ~ . - group - id
+
+# Basic usage with default prior (sample-weighted source mean)
 fit <- coxtrans(
   formula, sim2, sim2$group, 1,
   lambda1 = 0.075, lambda2 = 0.04, lambda3 = 0.04, penalty = "SCAD"
 )
 summary(fit)
+
+# Custom prior matrix (two tissue-based priors)
+pm <- rbind(
+  tissue_A = c(0.5, 0.5, 0, 0),
+  tissue_B = c(0, 0, 0.5, 0.5)
+)
+colnames(pm) <- c("2", "3", "4", "5")
+fit2 <- coxtrans(
+  formula, sim2, sim2$group, 1,
+  lambda1 = 0.075, lambda2 = 0.04, lambda3 = c(0.04, 0.04),
+  prior_matrix = pm, penalty = "SCAD"
+)
+summary(fit2)
 }
