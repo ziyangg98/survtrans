@@ -73,19 +73,17 @@ fit2 <- coxtrans(
 summary(fit2)
 ```
 
-### Automatic tuning with cross-validation
+### Automatic tuning
 
-Use `cv.coxtrans()` to automatically select lambda parameters via
-coordinate-wise cross-validation with the 1-SE rule:
+Use `cv.coxtrans()` to select lambdas (CV defines prediction-equivalent
+set, BIC selects simplest model) with sample splitting for valid inference:
 
-```{r cv, eval = FALSE}
+```{r cv}
 cv_fit <- cv.coxtrans(
   formula, sim2, sim2$group,
-  target = 1,
-  penalty = "SCAD", ncores = 4
+  target = 1, nlambda = 10, penalty = "SCAD"
 )
-summary(cv_fit$fit)
-cv_fit$best_lambdas
+cv_fit
 ```
 
 ### Baseline hazard

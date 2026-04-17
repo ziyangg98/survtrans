@@ -122,19 +122,30 @@ summary(fit2)
 #>   Sparse (zero)            : 16 features (X5, X6, X7, ...)
 ```
 
-### Automatic tuning with cross-validation
+### Automatic tuning
 
-Use `cv.coxtrans()` to automatically select lambda parameters via
-coordinate-wise cross-validation with the 1-SE rule:
+Use `cv.coxtrans()` to select lambdas (CV defines prediction-equivalent
+set, BIC selects simplest model) with sample splitting for valid
+inference:
 
 ``` r
 cv_fit <- cv.coxtrans(
   formula, sim2, sim2$group,
-  target = 1,
-  penalty = "SCAD", ncores = 4
+  target = 1, nlambda = 10, penalty = "SCAD"
 )
-summary(cv_fit$fit)
-cv_fit$best_lambdas
+cv_fit
+#> cv.coxtrans (CV + BIC + sample splitting)
+#> 
+#>   Lambda:    l1=0.0713, l2=0.0559, l3=0.2154
+#>   Selected:  4/20 (p < 0.05) (X1, X2, X3, X4)
+#> 
+#>        coef exp(coef) se(coef)      z  Pr(>|z|)    
+#> X1 0.346454  1.414044 0.058382 5.9343 2.951e-09 ***
+#> X2 0.341353  1.406849 0.057235 5.9640 2.461e-09 ***
+#> X3 0.353195  1.423609 0.056688 6.2305 4.650e-10 ***
+#> X4 0.317651  1.373896 0.053476 5.9401 2.849e-09 ***
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 ```
 
 ### Baseline hazard

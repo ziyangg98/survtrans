@@ -2,7 +2,7 @@
 % Please edit documentation in R/cv.coxtrans.R
 \name{cv.coxtrans}
 \alias{cv.coxtrans}
-\title{Cross-validated coxtrans}
+\title{Cross-validated coxtrans with sample splitting inference}
 \usage{
 cv.coxtrans(
   formula,
@@ -10,12 +10,15 @@ cv.coxtrans(
   group,
   target,
   prior_matrix = NULL,
-  nlambda = 100,
+  nlambda = 50,
   lambda.min.ratio = 0.001,
-  nfolds = 10,
-  seed = 42,
+  nfolds = 5,
   penalty = c("lasso", "MCP", "SCAD"),
+  sig_level = 0.05,
+  alpha_eq = 0.05,
+  split_ratio = 0.5,
   ncores = 1,
+  seed = 42,
   verbose = FALSE,
   ...
 )
@@ -23,73 +26,48 @@ cv.coxtrans(
 \arguments{
 \item{formula}{A formula with a \code{\link[survival]{Surv}} response.}
 
-\item{data}{A data frame containing the variables in the model.}
+\item{data}{A data frame.}
 
-\item{group}{A factor indicating the group of each observation.}
+\item{group}{A factor indicating group membership.}
 
 \item{target}{The target group level.}
 
-\item{prior_matrix}{Optional G x (K-1) transfer constraint matrix.
-See \code{\link{coxtrans}}.}
+\item{prior_matrix}{Optional G x (K-1) transfer constraint matrix.}
 
-\item{nlambda}{Number of lambda values per dimension. Default is 100.}
+\item{nlambda}{Number of lambda values per dimension. Default 50.}
 
-\item{lambda.min.ratio}{Ratio of the smallest to largest lambda value
-in the search path. Default is \code{1e-3}, meaning the path goes
-from \code{lambda_max * lambda.min.ratio} to \code{lambda_max}.}
+\item{lambda.min.ratio}{Smallest/largest lambda ratio. Default 1e-3.}
 
-\item{nfolds}{Number of cross-validation folds. Default is 10.}
+\item{nfolds}{Number of CV folds. Default 5.}
 
-\item{seed}{Random seed for fold assignment. Default is 42.}
+\item{penalty}{\code{"lasso"}, \code{"MCP"}, or \code{"SCAD"}.}
 
-\item{penalty}{Penalty type: \code{"lasso"}, \code{"MCP"}, or
-\code{"SCAD"}.}
+\item{sig_level}{Significance level for feature selection. Default 0.05.}
 
-\item{ncores}{Number of CPU cores for parallel fold evaluation.}
+\item{alpha_eq}{Significance level for equivalence test. Default 0.05.}
 
-\item{verbose}{Print progress if \code{TRUE}.}
+\item{split_ratio}{Fraction of target data for selection. Default 0.5.}
 
-\item{...}{Additional arguments passed to \code{\link{coxtrans}}.}
+\item{ncores}{Cores for parallel fold evaluation. Default 1.}
+
+\item{seed}{Random seed.}
+
+\item{verbose}{Print progress.}
+
+\item{...}{Passed to \code{\link{coxtrans}}.}
 }
 \value{
-A list with components:
-\item{best_lambdas}{List with lambda1, lambda2, lambda3.}
-\item{cv_results}{Per-dimension data frames with columns
-\code{lambda}, \code{loglik}, \code{se}.}
-\item{fit}{The final coxtrans fit on full data.}
+Object of class \code{cv.coxtrans}: \code{fit},
+\code{best_lambdas}, \code{selected}, \code{sig_level},
+\code{inference} (summary of inference-half fit).
 }
 \description{
-Selects penalty parameters (lambda1, lambda2, lambda3) via K-fold
-cross-validation with coordinate descent search, then applies the 1-SE
-rule to choose the simplest model with competitive prediction.
-}
-\details{
-\strong{Search strategy:} Coordinate descent over lambda dimensions in
-order lambda3 (prior) -> lambda2 (local) -> lambda1 (sparse), repeated
-up to 3 cycles until convergence.
-
-\strong{Model selection:} Among all visited lambda combinations with CV
-partial log-likelihood within one standard error of the maximum
-(Breiman et al., 1984), the model with the smallest target effective
-degrees of freedom is chosen.
-
-\strong{Target effective df} (Hodges & Sargent, 2001): For each non-zero
-target feature, the df contribution depends on how the coefficient is
-estimated:
-\itemize{
-\item Sparse (zero): df = 0
-\item Prior constrained: df = n_target / (n_target + n_eff), where
-n_eff = 1 / sum(w_i^2 / n_source_i) is the effective sample size
-of the prior-weighted source combination
-\item Shared across groups: df = n_target / n_shared
-\item Group-specific: df = 1
-}
+Selects penalty parameters via CV + BIC on a selection half of the
+target data, then fits and performs inference on the held-out inference
+half. This guarantees valid standard errors and coverage.
 }
 \examples{
-formula <- Surv(time, status) ~ . - group - id
-cv_fit <- cv.coxtrans(formula, sim2, sim2$group,
-  target = 1, nlambda = 5, penalty = "SCAD"
-)
-cv_fit$best_lambdas
-summary(cv_fit$fit)
+result <- cv.coxtrans(Surv(time, status) ~ . - group - id,
+  sim2, sim2$group, target = 1, nlambda = 10, penalty = "SCAD")
+result
 }

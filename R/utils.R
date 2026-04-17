@@ -146,6 +146,91 @@ penalty_value <- function(x, penalty, lambda, gamma) {
   )
 }
 
+# Internal: compute null-model score statistics for each group.
+calc_group_scores <- function(formula, data, group, offset = NULL) {
+  data <- preprocess(formula, data, group, offset)
+  x <- data$x
+  time <- data$time
+  status <- data$status
+  group <- data$group
+  offset <- data$offset
+
+  group_levels <- levels(group)
+  n_features <- ncol(x)
+  scores <- matrix(0, nrow = n_features, ncol = length(group_levels))
+  colnames(scores) <- group_levels
+  rownames(scores) <- colnames(x)
+
+  for (i in seq_along(group_levels)) {
+    idx <- which(group == group_levels[i])
+    wls <- approx_likelihood(offset[idx], time[idx], status[idx])
+    if (length(idx) > 1) {
+      scores[, i] <- colMeans(
+        sweep(x[idx, , drop = FALSE], 1, wls$residuals * wls$weights, `*`)
+      )
+    }
+  }
+
+  scores
+}
+
+calc_lambda1_max <- function(formula, data, group, target, offset = NULL) {
+  if (!is.factor(group)) group <- factor(group)
+  target_level <- as.character(target)
+  scores <- calc_group_scores(formula, data, group, offset)
+  if (!target_level %in% colnames(scores)) {
+    stop("target '", target_level, "' not found in group levels")
+  }
+  max(abs(scores[, target_level]), na.rm = TRUE)
+}
+
+calc_lambda2_max <- function(formula, data, group, target, offset = NULL) {
+  if (!is.factor(group)) group <- factor(group)
+  target_level <- as.character(target)
+  scores <- calc_group_scores(formula, data, group, offset)
+  if (!target_level %in% colnames(scores)) {
+    stop("target '", target_level, "' not found in group levels")
+  }
+  source_levels <- setdiff(colnames(scores), target_level)
+  if (length(source_levels) == 0) return(0)
+  target_scores <- scores[, target_level]
+  local_scores <- sweep(scores[, source_levels, drop = FALSE], 1, target_scores)
+  max(abs(local_scores), na.rm = TRUE)
+}
+
+calc_lambda3_max <- function(
+  formula, data, group, target, prior_matrix = NULL, offset = NULL
+) {
+  if (!is.factor(group)) group <- factor(group)
+  target_level <- as.character(target)
+  scores <- calc_group_scores(formula, data, group, offset)
+  if (!target_level %in% colnames(scores)) {
+    stop("target '", target_level, "' not found in group levels")
+  }
+
+  source_levels <- setdiff(colnames(scores), target_level)
+  if (length(source_levels) == 0) return(0)
+  if (is.null(prior_matrix)) {
+    source_sizes <- tabulate(group)[match(source_levels, levels(group))]
+    prior_matrix <- matrix(source_sizes / sum(source_sizes), nrow = 1)
+    colnames(prior_matrix) <- source_levels
+  }
+  if (ncol(prior_matrix) != length(source_levels)) {
+    stop("prior_matrix must have ", length(source_levels),
+      " columns (one per source)"
+    )
+  }
+
+  source_scores <- scores[, source_levels, drop = FALSE]
+  target_scores <- scores[, target_level]
+  lambda3_max <- vapply(seq_len(nrow(prior_matrix)), function(g) {
+    prior_scores <- as.numeric(prior_matrix[g, , drop = FALSE] %*% t(source_scores))
+    max(abs(target_scores - prior_scores), na.rm = TRUE)
+  }, numeric(1))
+  names(lambda3_max) <- rownames(prior_matrix)
+  lambda3_max
+}
+
 #' Calculate the maximum value of the penalty parameter lambda
 #'
 #' @param formula A formula expression for regression models, in the form
@@ -158,32 +243,16 @@ penalty_value <- function(x, penalty, lambda, gamma) {
 #' @return The maximum value of the penalty parameter lambda, which shrinks all
 #' the coefficients to zero.
 #' @export
-calc_lambda_max <- function(formula, data, group, offset) {
-  # Load the data
-  data <- preprocess(formula, data, group, offset)
-  x <- data$x
-  time <- data$time
-  status <- data$status
-  group <- data$group
-  offset <- data$offset
-
-  # Properties of the data
-  group_levels <- levels(group)
-
-  # Calculate the lambda_max
-  lambdas_max <- numeric(length(group_levels))
-  for (i in seq_along(group_levels)) {
-    idx <- which(group == group_levels[i])
-    wls <- approx_likelihood(offset[idx], time[idx], status[idx])
-    if (length(idx) > 1) {
-      xwr <- colMeans(sweep(x[idx, ], 1, wls$residuals * wls$weights, `*`))
-    } else {
-      xwr <- 0
-    }
-    lambdas_max[i] <- max(abs(xwr), na.rm = TRUE)
-  }
-  lambda_max <- max(lambdas_max, na.rm = TRUE)
-  lambda_max
+calc_lambda_max <- function(formula, data, group, offset = NULL) {
+  if (!is.factor(group)) group <- factor(group)
+  target_levels <- levels(group)
+  max(vapply(target_levels, function(target) {
+    max(
+      calc_lambda1_max(formula, data, group, target, offset = offset),
+      calc_lambda2_max(formula, data, group, target, offset = offset),
+      calc_lambda3_max(formula, data, group, target, offset = offset)
+    )
+  }, numeric(1)))
 }
 
 #' Simulate survival data for a multi-source Cox model

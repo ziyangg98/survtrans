@@ -1,365 +1,251 @@
-#' Cross-validated coxtrans
+#' Cross-validated coxtrans with sample splitting inference
 #'
-#' Selects penalty parameters (lambda1, lambda2, lambda3) via K-fold
-#' cross-validation with coordinate descent search, then applies the 1-SE
-#' rule to choose the simplest model with competitive prediction.
+#' Selects penalty parameters via CV + BIC on a selection half of the
+#' target data, then fits and performs inference on the held-out inference
+#' half. This guarantees valid standard errors and coverage.
 #'
 #' @param formula A formula with a \code{\link[survival]{Surv}} response.
-#' @param data A data frame containing the variables in the model.
-#' @param group A factor indicating the group of each observation.
+#' @param data A data frame.
+#' @param group A factor indicating group membership.
 #' @param target The target group level.
 #' @param prior_matrix Optional G x (K-1) transfer constraint matrix.
-#'   See \code{\link{coxtrans}}.
-#' @param nlambda Number of lambda values per dimension. Default is 100.
-#' @param lambda.min.ratio Ratio of the smallest to largest lambda value
-#'   in the search path. Default is \code{1e-3}, meaning the path goes
-#'   from \code{lambda_max * lambda.min.ratio} to \code{lambda_max}.
-#' @param nfolds Number of cross-validation folds. Default is 10.
-#' @param seed Random seed for fold assignment. Default is 42.
-#' @param penalty Penalty type: \code{"lasso"}, \code{"MCP"}, or
-#'   \code{"SCAD"}.
-#' @param ncores Number of CPU cores for parallel fold evaluation.
-#' @param verbose Print progress if \code{TRUE}.
-#' @param ... Additional arguments passed to \code{\link{coxtrans}}.
+#' @param nlambda Number of lambda values per dimension. Default 50.
+#' @param lambda.min.ratio Smallest/largest lambda ratio. Default 1e-3.
+#' @param nfolds Number of CV folds. Default 5.
+#' @param penalty \code{"lasso"}, \code{"MCP"}, or \code{"SCAD"}.
+#' @param sig_level Significance level for feature selection. Default 0.05.
+#' @param alpha_eq Significance level for equivalence test. Default 0.05.
+#' @param split_ratio Fraction of target data for selection. Default 0.5.
+#' @param ncores Cores for parallel fold evaluation. Default 1.
+#' @param seed Random seed.
+#' @param verbose Print progress.
+#' @param ... Passed to \code{\link{coxtrans}}.
 #'
-#' @return A list with components:
-#'   \item{best_lambdas}{List with lambda1, lambda2, lambda3.}
-#'   \item{cv_results}{Per-dimension data frames with columns
-#'     \code{lambda}, \code{loglik}, \code{se}.}
-#'   \item{fit}{The final coxtrans fit on full data.}
-#'
-#' @details
-#' \strong{Search strategy:} Coordinate descent over lambda dimensions in
-#' order lambda3 (prior) -> lambda2 (local) -> lambda1 (sparse), repeated
-#' up to 3 cycles until convergence.
-#'
-#' \strong{Model selection:} Among all visited lambda combinations with CV
-#' partial log-likelihood within one standard error of the maximum
-#' (Breiman et al., 1984), the model with the smallest target effective
-#' degrees of freedom is chosen.
-#'
-#' \strong{Target effective df} (Hodges & Sargent, 2001): For each non-zero
-#' target feature, the df contribution depends on how the coefficient is
-#' estimated:
-#' \itemize{
-#'   \item Sparse (zero): df = 0
-#'   \item Prior constrained: df = n_target / (n_target + n_eff), where
-#'     n_eff = 1 / sum(w_i^2 / n_source_i) is the effective sample size
-#'     of the prior-weighted source combination
-#'   \item Shared across groups: df = n_target / n_shared
-#'   \item Group-specific: df = 1
-#' }
-#'
+#' @return Object of class \code{cv.coxtrans}: \code{fit},
+#'   \code{best_lambdas}, \code{selected}, \code{sig_level},
+#'   \code{inference} (summary of inference-half fit).
 #' @export
 #'
 #' @examples
-#' formula <- Surv(time, status) ~ . - group - id
-#' cv_fit <- cv.coxtrans(formula, sim2, sim2$group,
-#'   target = 1, nlambda = 5, penalty = "SCAD"
-#' )
-#' cv_fit$best_lambdas
-#' summary(cv_fit$fit)
+#' result <- cv.coxtrans(Surv(time, status) ~ . - group - id,
+#'   sim2, sim2$group, target = 1, nlambda = 10, penalty = "SCAD")
+#' result
 cv.coxtrans <- function(
   formula, data, group, target,
-  prior_matrix = NULL,
-  nlambda = 100,
-  lambda.min.ratio = 1e-3,
-  nfolds = 10,
-  seed = 42,
-  penalty = c("lasso", "MCP", "SCAD"),
-  ncores = 1,
-  verbose = FALSE,
-  ...
+  prior_matrix = NULL, nlambda = 50, lambda.min.ratio = 1e-3,
+  nfolds = 5, penalty = c("lasso", "MCP", "SCAD"),
+  sig_level = 0.05, alpha_eq = 0.05, split_ratio = 0.5,
+  ncores = 1, seed = 42, verbose = FALSE, ...
 ) {
   penalty <- match.arg(penalty)
   if (!is.factor(group)) group <- factor(group)
   target_level <- as.character(target)
   target_idx <- which(group == target_level)
+  source_idx <- which(group != target_level)
   n_priors <- if (is.null(prior_matrix)) 1L else nrow(prior_matrix)
 
-  # Log-scale search path from lambda_max (like glmnet)
-  lambda_max <- calc_lambda_max(formula, data, group)
-  lambda_path <- exp(seq(
-    log(lambda_max * lambda.min.ratio),
-    log(lambda_max),
-    length.out = nlambda
-  ))
-
-  # Stratified CV folds on target group (by event status)
-  set.seed(seed)
-  target_mf <- stats::model.frame(formula, data[target_idx, ])
-  target_status <- stats::model.response(target_mf)[, 2]
-  fold_ids <- integer(length(target_idx))
-  for (s in unique(target_status)) {
-    idx_s <- which(target_status == s)
-    fold_ids[idx_s] <- sample(rep(seq_len(nfolds), length.out = length(idx_s)))
+  build_lambda_path <- function(lambda_max) {
+    if (!is.finite(lambda_max) || lambda_max <= 0) {
+      return(0)
+    }
+    c(0, exp(seq(log(lambda_max * lambda.min.ratio),
+      log(lambda_max), length.out = nlambda)))
   }
-  fold_data <- lapply(seq_len(nfolds), function(k) {
-    test_idx <- target_idx[fold_ids == k]
-    train_rows <- setdiff(seq_len(nrow(data)), test_idx)
-    mf <- stats::model.frame(formula, data[test_idx, ])
-    y <- stats::model.response(mf)
-    list(
-      train_rows = train_rows,
-      x_test = stats::model.matrix(formula, data[test_idx, ])[, -1],
-      time_test = y[, 1], status_test = y[, 2]
-    )
-  })
 
-  # Evaluate CV log-likelihood across folds
-  cv_loglik_folds <- function(lambda1, lambda2, lambda3) {
-    eval_fold <- function(k) {
-      fd <- fold_data[[k]]
-      fit <- tryCatch(
-        coxtrans(formula, data[fd$train_rows, ], group[fd$train_rows],
-          target,
-          lambda1 = lambda1, lambda2 = lambda2, lambda3 = lambda3,
-          prior_matrix = prior_matrix, penalty = penalty, ...
-        ),
-        error = function(e) NULL
-      )
-      if (is.null(fit)) {
-        return(-Inf)
-      }
-      lp <- as.numeric(fd$x_test %*% fit$coefficients[, 1])
-      ord <- order(fd$time_test, decreasing = TRUE)
-      sum(fd$status_test[ord] * (lp[ord] - log(cumsum(exp(lp[ord])))))
+  lambda1_max <- calc_lambda1_max(formula, data, group, target)
+  lambda2_max <- calc_lambda2_max(formula, data, group, target)
+  lambda3_max <- calc_lambda3_max(formula, data, group, target, prior_matrix)
+
+  lambda1_path <- build_lambda_path(lambda1_max)
+  lambda2_path <- build_lambda_path(lambda2_max)
+  lambda3_path <- lapply(lambda3_max, build_lambda_path)
+
+  # ================================================================
+  # Sample splitting: target data → selection + inference
+  # ================================================================
+  set.seed(seed)
+  n_target <- length(target_idx)
+  n_sel <- round(n_target * split_ratio)
+  sel_perm <- sample(n_target)
+  sel_target <- target_idx[sel_perm[seq_len(n_sel)]]
+  inf_target <- target_idx[sel_perm[(n_sel + 1):n_target]]
+
+  # Selection data: selection-half target + all sources
+  sel_rows <- sort(c(sel_target, source_idx))
+  sel_data <- data[sel_rows, ]
+  sel_group <- group[sel_rows]
+
+  # Inference data: inference-half target + all sources
+  inf_rows <- sort(c(inf_target, source_idx))
+  inf_data <- data[inf_rows, ]
+  inf_group <- group[inf_rows]
+
+  if (verbose) cat(sprintf("Split: %d selection + %d inference (target)\n",
+                           n_sel, n_target - n_sel))
+
+  safe_fit <- function(l1, l2, l3, d = sel_data, g = sel_group)
+    tryCatch(coxtrans(formula, d, g, target, lambda1 = l1,
+      lambda2 = l2, lambda3 = l3, prior_matrix = prior_matrix,
+      penalty = penalty, ...), error = function(e) NULL)
+
+  # ================================================================
+  # Step 1: CV on selection half
+  # ================================================================
+  if (verbose) cat(sprintf("Step 1: CV (%d-fold)\n", nfolds))
+  sel_target_local <- which(sel_group == target_level)
+
+  set.seed(seed + 1L)
+  y_sel <- stats::model.response(
+    stats::model.frame(formula, sel_data[sel_target_local, ]))
+  fids <- integer(length(sel_target_local))
+  for (s in unique(y_sel[, 2])) {
+    i <- which(y_sel[, 2] == s)
+    fids[i] <- sample(rep(seq_len(nfolds), length.out = length(i)))
+  }
+
+  cv_folds <- function(l1, l2, l3) {
+    eval1 <- function(k) {
+      ti <- sel_target_local[fids == k]
+      fit <- tryCatch(coxtrans(formula, sel_data[-ti, ],
+        sel_group[-ti], target, lambda1 = l1, lambda2 = l2,
+        lambda3 = l3, prior_matrix = prior_matrix,
+        penalty = penalty, ...), error = function(e) NULL)
+      if (is.null(fit)) return(-Inf)
+      xt <- stats::model.matrix(formula, sel_data[ti, ])[, -1]
+      yt <- stats::model.response(
+        stats::model.frame(formula, sel_data[ti, ]))
+      lp <- as.numeric(xt %*% fit$coefficients[, 1])
+      o <- order(yt[, 1], decreasing = TRUE)
+      sum(yt[o, 2] * (lp[o] - log(cumsum(exp(lp[o])))))
     }
     if (ncores > 1) {
-      unlist(parallel::mclapply(seq_len(nfolds), eval_fold, mc.cores = ncores))
-    } else {
-      vapply(seq_len(nfolds), eval_fold, numeric(1))
+      unlist(parallel::mclapply(seq_len(nfolds), eval1,
+                                mc.cores = ncores))
+    } else vapply(seq_len(nfolds), eval1, numeric(1))
+  }
+
+  visited_lams <- list(); visited_folds <- list()
+  best_l1 <- 0; best_l2 <- 0; best_l3 <- rep(0, n_priors)
+
+  search1 <- function(path, make_lams, name) {
+    bv <- path[1]; bll <- -Inf
+    for (v in path) {
+      lm <- make_lams(v)
+      fll <- cv_folds(lm[1], lm[2], lm[-(1:2)])
+      visited_lams[[length(visited_lams) + 1]] <<- lm
+      visited_folds[[length(visited_folds) + 1]] <<- fll
+      if (mean(fll) > bll) { bll <- mean(fll); bv <- v }
+    }
+    if (verbose) cat(sprintf("    %s = %.5f\n", name, bv))
+    bv
+  }
+
+  for (cyc in seq_len(3)) {
+    prev <- if (length(visited_folds) > 0) {
+      max(sapply(visited_folds, mean))
+    } else -Inf
+    if (verbose) cat(sprintf("  Cycle %d:\n", cyc))
+    for (g in seq_len(n_priors))
+      best_l3[g] <- search1(lambda3_path[[g]], function(v) {
+        tr <- best_l3; tr[g] <- v; c(best_l1, best_l2, tr)
+      }, if (n_priors == 1) "l3" else paste0("l3[", g, "]"))
+    best_l2 <- search1(lambda2_path, function(v)
+      c(best_l1, v, best_l3), "l2")
+    best_l1 <- search1(lambda1_path, function(v)
+      c(v, best_l2, best_l3), "l1")
+    cur <- max(sapply(visited_folds, mean))
+    if (is.finite(prev) && is.finite(cur) &&
+        abs(cur - prev) / (abs(prev) + 1) < 1e-3) {
+      if (verbose) cat("  Converged\n"); break
     }
   }
 
-  # Search one lambda dimension
-  search_dim <- function(path, make_lambdas) {
-    loglik_mean <- loglik_se <- numeric(length(path))
-    for (i in seq_along(path)) {
-      lambdas <- make_lambdas(path[i])
-      fold_logliks <- cv_loglik_folds(lambdas[1], lambdas[2], lambdas[-(1:2)])
-      loglik_mean[i] <- mean(fold_logliks)
-      loglik_se[i] <- stats::sd(fold_logliks) / sqrt(nfolds)
-    }
-    list(
-      best = path[which.max(loglik_mean)],
-      loglik = loglik_mean, se = loglik_se
+  # ================================================================
+  # Step 2: Equivalence set + BIC (on selection half)
+  # ================================================================
+  n_vis <- length(visited_lams)
+  i_best <- which.max(sapply(visited_folds, mean))
+  fll_best <- visited_folds[[i_best]]
+
+  equiv <- logical(n_vis)
+  for (i in seq_len(n_vis)) {
+    if (i == i_best) { equiv[i] <- TRUE; next }
+    d <- fll_best - visited_folds[[i]]
+    if (any(!is.finite(d))) next
+    tt <- tryCatch(stats::t.test(d)$p.value, error = function(e) 0)
+    equiv[i] <- tt > alpha_eq
+  }
+  eq_idx <- which(equiv)
+  eq_keys <- sapply(eq_idx, function(i)
+    paste(round(visited_lams[[i]], 8), collapse = "_"))
+  eq_idx <- eq_idx[!duplicated(eq_keys)]
+
+  if (verbose) cat(sprintf("Step 2: %d/%d equivalent\n",
+                           length(eq_idx), n_vis))
+
+  eq_bic <- rep(Inf, length(eq_idx))
+  for (ci in seq_along(eq_idx)) {
+    lm <- visited_lams[[eq_idx[ci]]]
+    fit <- safe_fit(lm[1], lm[2], lm[-(1:2)])
+    if (!is.null(fit)) eq_bic[ci] <- BIC(fit)
+  }
+  bi <- which.min(eq_bic)
+  best_lam <- visited_lams[[eq_idx[bi]]]
+  best_l1 <- best_lam[1]; best_l2 <- best_lam[2]
+  best_l3 <- best_lam[-(1:2)]
+
+  if (verbose) cat(sprintf("  BIC: l1=%.4f l2=%.4f l3=%s\n",
+    best_l1, best_l2, paste(round(best_l3, 4), collapse = ",")))
+
+  # ================================================================
+  # Step 3: Fit on inference half + summary for inference
+  # ================================================================
+  if (verbose) cat("Step 3: Inference\n")
+  inf_fit <- safe_fit(best_l1, best_l2, best_l3,
+                      d = inf_data, g = inf_group)
+  if (is.null(inf_fit)) stop("Inference fit failed.")
+
+  p <- nrow(inf_fit$coefficients)
+  fnames <- rownames(inf_fit$coefficients)
+
+  # summary.coxtrans gives target coefficients + sandwich SE + p-values
+  smry <- summary(inf_fit, target_only = TRUE)
+  coef_target <- smry$coefficients[, "coef"]
+  se_target <- smry$coefficients[, "se(coef)"]
+  pv_target <- smry$coefficients[, "Pr(>|z|)"]
+  sel <- which(pv_target < sig_level & abs(coef_target) > 1e-8)
+
+  if (verbose) cat(sprintf("  %d selected\n", length(sel)))
+
+  out <- list(
+    fit = inf_fit,
+    best_lambdas = list(lambda1 = best_l1, lambda2 = best_l2,
+                        lambda3 = best_l3),
+    selected = sel, sig_level = sig_level,
+    coefficients = smry$coefficients)
+  class(out) <- "cv.coxtrans"
+  out
+}
+
+#' @export
+print.cv.coxtrans <- function(x, ...) {
+  p <- nrow(x$fit$coefficients)
+  ns <- length(x$selected)
+  cat("cv.coxtrans (CV + BIC + sample splitting)\n\n")
+  cat(sprintf("  Lambda:    l1=%.4f, l2=%.4f, l3=%s\n",
+    x$best_lambdas$lambda1, x$best_lambdas$lambda2,
+    paste(round(x$best_lambdas$lambda3, 4), collapse = ",")))
+  cat(sprintf("  Selected:  %d/%d (p < %g)", ns, p, x$sig_level))
+  if (ns > 0)
+    cat(" (", paste(rownames(x$fit$coefficients)[x$selected],
+                    collapse = ", "), ")", sep = "")
+  cat("\n\n")
+  # Print coefficients for selected features
+  if (ns > 0) {
+    stats::printCoefmat(
+      x$coefficients[x$selected, , drop = FALSE],
+      cs.ind = 1:3, tst.ind = 4, P.values = TRUE, has.Pvalue = TRUE
     )
   }
-
-  # Record visited lambda combinations for 1-SE selection
-  record_visited <- function(visited, res, lambda1, lambda2, lambda3,
-                             dim_idx, path) {
-    for (i in seq_along(path)) {
-      lam1 <- lambda1
-      lam2 <- lambda2
-      lam3 <- lambda3
-      if (dim_idx == 1) {
-        lam1 <- path[i]
-      } else if (dim_idx == 2) {
-        lam2 <- path[i]
-      } else {
-        lam3[dim_idx - 2] <- path[i]
-      }
-      row <- data.frame(
-        lambda1 = lam1, lambda2 = lam2,
-        loglik_mean = res$loglik[i], loglik_se = res$se[i]
-      )
-      for (g in seq_len(n_priors)) row[[paste0("lambda3_", g)]] <- lam3[g]
-      visited <- rbind(visited, row)
-    }
-    visited
-  }
-
-  # Initialize at zero (no penalty)
-  best_lambda1 <- 0
-  best_lambda2 <- 0
-  best_lambda3 <- rep(0, n_priors)
-
-  dim_names <- c(
-    "lambda1", "lambda2",
-    if (n_priors == 1) "lambda3" else paste0("lambda3[", seq_len(n_priors), "]")
-  )
-  n_dims <- 2 + n_priors
-  cv_results <- stats::setNames(vector("list", n_dims), dim_names)
-
-  visited <- data.frame(
-    lambda1 = numeric(0), lambda2 = numeric(0),
-    loglik_mean = numeric(0), loglik_se = numeric(0)
-  )
-  for (g in seq_len(n_priors)) visited[[paste0("lambda3_", g)]] <- numeric(0)
-
-  best_loglik <- -Inf
-
-  if (verbose) {
-    cat(sprintf(
-      "Search: %d lambdas x %d dims x %d folds\n",
-      nlambda, n_dims, nfolds
-    ))
-  }
-
-  # Coordinate descent: lambda3 -> lambda2 -> lambda1
-  for (cycle in seq_len(3)) {
-    prev_loglik <- best_loglik
-    if (verbose) cat(sprintf("Cycle %d:\n", cycle))
-
-    # lambda3[g]
-    for (g in seq_len(n_priors)) {
-      res <- search_dim(lambda_path, function(v) {
-        trial <- best_lambda3
-        trial[g] <- v
-        c(best_lambda1, best_lambda2, trial)
-      })
-      best_lambda3[g] <- res$best
-      cv_results[[2 + g]] <- data.frame(
-        lambda = lambda_path, loglik = res$loglik, se = res$se
-      )
-      visited <- record_visited(
-        visited, res,
-        best_lambda1, best_lambda2, best_lambda3, 2 + g, lambda_path
-      )
-      if (verbose) {
-        cat(sprintf(
-          "  %s: %.5f (ll=%.4f)\n",
-          dim_names[2 + g], best_lambda3[g], max(res$loglik)
-        ))
-      }
-    }
-
-    # lambda2
-    res <- search_dim(lambda_path, function(v) {
-      c(best_lambda1, v, best_lambda3)
-    })
-    best_lambda2 <- res$best
-    cv_results[[2]] <- data.frame(
-      lambda = lambda_path, loglik = res$loglik, se = res$se
-    )
-    visited <- record_visited(
-      visited, res,
-      best_lambda1, best_lambda2, best_lambda3, 2, lambda_path
-    )
-    if (verbose) {
-      cat(sprintf(
-        "  lambda2: %.5f (ll=%.4f)\n",
-        best_lambda2, max(res$loglik)
-      ))
-    }
-
-    # lambda1
-    res <- search_dim(lambda_path, function(v) {
-      c(v, best_lambda2, best_lambda3)
-    })
-    best_lambda1 <- res$best
-    cv_results[[1]] <- data.frame(
-      lambda = lambda_path, loglik = res$loglik, se = res$se
-    )
-    visited <- record_visited(
-      visited, res,
-      best_lambda1, best_lambda2, best_lambda3, 1, lambda_path
-    )
-    if (verbose) {
-      cat(sprintf(
-        "  lambda1: %.5f (ll=%.4f)\n",
-        best_lambda1, max(res$loglik)
-      ))
-    }
-
-    best_loglik <- max(cv_results[[1]]$loglik)
-    if (verbose) cat(sprintf("  => ll=%.4f\n", best_loglik))
-
-    if (is.finite(prev_loglik) &&
-      abs(best_loglik - prev_loglik) / (abs(prev_loglik) + 1) < 1e-3) {
-      if (verbose) cat("  Converged.\n")
-      break
-    }
-  }
-
-  # --- 1-SE rule + min target effective df (Hodges & Sargent, 2001) ---
-  idx_max <- which.max(visited$loglik_mean)
-  threshold <- visited$loglik_mean[idx_max] - visited$loglik_se[idx_max]
-  candidates <- which(visited$loglik_mean >= threshold)
-
-  calc_target_df <- function(fit) {
-    coefs <- fit$coefficients
-    group_sizes <- as.numeric(table(fit$group))
-    group_sizes <- group_sizes[match(colnames(coefs), levels(fit$group))]
-    n_target <- group_sizes[1]
-    source_sizes <- group_sizes[-1]
-    pm <- fit$prior_matrix
-    df <- 0
-    for (j in seq_len(nrow(coefs))) {
-      if (abs(coefs[j, 1]) < 1e-8) next
-      active_priors <- which(fit$active_prior[j, ])
-      if (length(active_priors) > 0) {
-        # Prior: df = n_target / (n_target + n_eff)
-        weights <- pm[active_priors[1], ]
-        nonzero_w <- which(weights > 0)
-        n_effective <- 1 / sum(weights[nonzero_w]^2 / source_sizes[nonzero_w])
-        df <- df + n_target / (n_target + n_effective)
-      } else {
-        # Local shared or group-specific: df = n_target / n_shared
-        shared_groups <- abs(coefs[j, ] - coefs[j, 1]) < 1e-6
-        df <- df + n_target / sum(group_sizes[shared_groups])
-      }
-    }
-    df
-  }
-
-  candidate_df <- rep(Inf, length(candidates))
-  for (ci in seq_along(candidates)) {
-    idx <- candidates[ci]
-    lambda3_cand <- sapply(seq_len(n_priors), function(g) {
-      visited[[paste0("lambda3_", g)]][idx]
-    })
-    fit_cand <- tryCatch(
-      coxtrans(formula, data, group, target,
-        lambda1 = visited$lambda1[idx], lambda2 = visited$lambda2[idx],
-        lambda3 = lambda3_cand,
-        prior_matrix = prior_matrix, penalty = penalty, ...
-      ),
-      error = function(e) NULL
-    )
-    if (!is.null(fit_cand)) candidate_df[ci] <- calc_target_df(fit_cand)
-  }
-
-  # Min target_df; ties broken by max CV loglik
-  min_df <- min(candidate_df)
-  ties <- which(abs(candidate_df - min_df) < 1e-8)
-  best_ci <- ties[which.max(visited$loglik_mean[candidates[ties]])]
-  best_idx <- candidates[best_ci]
-
-  best_lambda1 <- visited$lambda1[best_idx]
-  best_lambda2 <- visited$lambda2[best_idx]
-  best_lambda3 <- sapply(seq_len(n_priors), function(g) {
-    visited[[paste0("lambda3_", g)]][best_idx]
-  })
-
-  if (verbose) {
-    cat(sprintf(
-      "1-SE rule: %d candidates, min target_df=%.2f\n",
-      length(candidates), min_df
-    ))
-    cat(sprintf(
-      "Selected: lambda=(%.5f, %.5f, %s)\n",
-      best_lambda1, best_lambda2,
-      paste(round(best_lambda3, 5), collapse = ", ")
-    ))
-  }
-
-  # Final refit on full data
-  fit <- coxtrans(formula, data, group, target,
-    lambda1 = best_lambda1, lambda2 = best_lambda2,
-    lambda3 = best_lambda3,
-    prior_matrix = prior_matrix, penalty = penalty, ...
-  )
-
-  list(
-    best_lambdas = list(
-      lambda1 = best_lambda1,
-      lambda2 = best_lambda2,
-      lambda3 = best_lambda3
-    ),
-    cv_results = cv_results,
-    fit = fit
-  )
+  invisible(x)
 }
