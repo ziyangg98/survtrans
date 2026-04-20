@@ -20,6 +20,7 @@ coxtrans(
   penalty = c("lasso", "MCP", "SCAD"),
   gamma = switch(penalty, SCAD = 3.7, MCP = 3, 1),
   vartheta = 1,
+  nthreads = 1L,
   control,
   ...
 )
@@ -77,6 +78,13 @@ coxtrans(
 - vartheta:
 
   Fixed augmented Lagrangian parameter. Default 1.0.
+
+- nthreads:
+
+  Number of OpenMP threads for C++ computations. Default 1. Set to a
+  higher value to use multiple cores within a single model fit. Note:
+  total CPU usage is `nthreads` x number of parallel R workers (e.g. in
+  `cv.coxtrans` with `ncores > 1`).
 
 - control:
 

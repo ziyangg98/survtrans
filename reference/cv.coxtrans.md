@@ -19,6 +19,7 @@ cv.coxtrans(
   nfolds = 10,
   penalty = c("lasso", "MCP", "SCAD"),
   ncores = 1,
+  nthreads = 1L,
   seed = 42,
   verbose = FALSE,
   ...
@@ -72,7 +73,13 @@ predict(object, s = c("lambda.min", "lambda.1se"), ...)
 
 - ncores:
 
-  Cores for parallel grid evaluation. Default 1.
+  Number of R worker processes for parallel grid evaluation. Default 1.
+
+- nthreads:
+
+  Number of OpenMP threads per
+  [`coxtrans()`](http://gongziyang.com/survtrans/reference/coxtrans.md)
+  call. Default 1. Total CPU usage is `ncores x nthreads`.
 
 - seed:
 
@@ -86,6 +93,10 @@ predict(object, s = c("lambda.min", "lambda.1se"), ...)
 
   Passed to
   [`coxtrans`](http://gongziyang.com/survtrans/reference/coxtrans.md).
+
+- object:
+
+  A `cv.coxtrans` object.
 
 - s:
 
