@@ -16,6 +16,7 @@ coxtrans(
   penalty = c("lasso", "MCP", "SCAD"),
   gamma = switch(penalty, SCAD = 3.7, MCP = 3, 1),
   vartheta = 1,
+  nthreads = 1L,
   control,
   ...
 )
@@ -50,6 +51,11 @@ a single prior using sample-weighted source means is used.}
 3.0 (MCP).}
 
 \item{vartheta}{Fixed augmented Lagrangian parameter. Default 1.0.}
+
+\item{nthreads}{Number of OpenMP threads for C++ computations. Default 1.
+Set to a higher value to use multiple cores within a single model fit.
+Note: total CPU usage is \code{nthreads} x number of parallel R workers
+(e.g. in \code{cv.coxtrans} with \code{ncores > 1}).}
 
 \item{control}{A \link{survtrans_control} object.}
 

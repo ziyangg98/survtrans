@@ -17,6 +17,7 @@ cv.coxtrans(
   nfolds = 10,
   penalty = c("lasso", "MCP", "SCAD"),
   ncores = 1,
+  nthreads = 1L,
   seed = 42,
   verbose = FALSE,
   ...
@@ -45,13 +46,19 @@ cv.coxtrans(
 
 \item{penalty}{\code{"lasso"}, \code{"MCP"}, or \code{"SCAD"}.}
 
-\item{ncores}{Cores for parallel grid evaluation. Default 1.}
+\item{ncores}{Number of R worker processes for parallel grid evaluation.
+Default 1.}
+
+\item{nthreads}{Number of OpenMP threads per \code{coxtrans()} call.
+Default 1. Total CPU usage is \code{ncores x nthreads}.}
 
 \item{seed}{Random seed.}
 
 \item{verbose}{Print progress.}
 
 \item{...}{Passed to \code{\link{coxtrans}}.}
+
+\item{object}{A \code{cv.coxtrans} object.}
 
 \item{s}{Which model to predict from: \code{"lambda.min"} (default) or
 \code{"lambda.1se"}.}
@@ -61,8 +68,8 @@ An object of class \code{cv.coxtrans} with fields:
 \code{grid} (full lambda grid), \code{cvm} (mean deviance per grid
 point), \code{cvsd}, \code{cvup}, \code{cvlo}, \code{nzero} (mean
 non-zero target coefficients), \code{lambda.min} (optimal lambda list),
-\code{lambda.1se} (1SE-rule lambda list), \code{index.min}, \code{index.1se},
-\code{coxtrans.fit} (final model at lambda.min),
+\code{lambda.1se} (1SE-rule lambda list), \code{index.min},
+\code{index.1se}, \code{coxtrans.fit} (final model at lambda.min),
 \code{coxtrans.fit.1se} (final model at lambda.1se),
 \code{call}, \code{name}.
 }

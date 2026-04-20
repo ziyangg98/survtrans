@@ -5,6 +5,10 @@ approx_likelihood <- function(offset, time, status) {
     .Call(`_survtrans_approx_likelihood`, offset, time, status)
 }
 
+set_omp_threads <- function(n) {
+    invisible(.Call(`_survtrans_set_omp_threads`, n))
+}
+
 ave_max <- function(x, group) {
     .Call(`_survtrans_ave_max`, x, group)
 }

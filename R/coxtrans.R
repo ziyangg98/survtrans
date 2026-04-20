@@ -23,6 +23,10 @@
 #' @param gamma Concavity parameter for MCP/SCAD. Default 3.7 (SCAD) or
 #'   3.0 (MCP).
 #' @param vartheta Fixed augmented Lagrangian parameter. Default 1.0.
+#' @param nthreads Number of OpenMP threads for C++ computations. Default 1.
+#'   Set to a higher value to use multiple cores within a single model fit.
+#'   Note: total CPU usage is \code{nthreads} x number of parallel R workers
+#'   (e.g. in \code{cv.coxtrans} with \code{ncores > 1}).
 #' @param control A \link{survtrans_control} object.
 #' @param ... Additional arguments passed to \code{survtrans_control}.
 #'
@@ -73,8 +77,10 @@ coxtrans <- function(
     MCP = 3,
     1
   ), vartheta = 1.0,
+  nthreads = 1L,
   control, ...
 ) {
+  set_omp_threads(as.integer(nthreads))
   penalty <- match.arg(penalty, choices = c("lasso", "MCP", "SCAD"))
   if (missing(control)) control <- survtrans_control(...)
   if (lambda1 < 0 || lambda2 < 0 || any(lambda3 < 0)) {

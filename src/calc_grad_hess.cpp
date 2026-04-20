@@ -1,6 +1,16 @@
 #include <RcppArmadillo.h>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 using namespace Rcpp;
 using namespace arma;
+
+// [[Rcpp::export]]
+void set_omp_threads(int n) {
+#ifdef _OPENMP
+  omp_set_num_threads(n);
+#endif
+}
 
 // Internal helper (modifies in place) for use within C++
 NumericVector ave_max_inplace(NumericVector x, NumericVector group) {

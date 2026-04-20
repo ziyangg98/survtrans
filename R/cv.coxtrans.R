@@ -14,7 +14,10 @@
 #' @param lambda.min.ratio Smallest/largest lambda ratio. Default 1e-3.
 #' @param nfolds Number of CV folds. Default 10.
 #' @param penalty \code{"lasso"}, \code{"MCP"}, or \code{"SCAD"}.
-#' @param ncores Cores for parallel grid evaluation. Default 1.
+#' @param ncores Number of R worker processes for parallel grid evaluation.
+#'   Default 1.
+#' @param nthreads Number of OpenMP threads per \code{coxtrans()} call.
+#'   Default 1. Total CPU usage is \code{ncores x nthreads}.
 #' @param seed Random seed.
 #' @param verbose Print progress.
 #' @param ... Passed to \code{\link{coxtrans}}.
@@ -40,7 +43,7 @@ cv.coxtrans <- function(
   formula, data, group, target,
   prior_matrix = NULL, nlambda = 10, lambda.min.ratio = 1e-3,
   nfolds = 10, penalty = c("lasso", "MCP", "SCAD"),
-  ncores = 1, seed = 42, verbose = FALSE, ...
+  ncores = 1, nthreads = 1L, seed = 42, verbose = FALSE, ...
 ) {
   this_call <- match.call()
   penalty <- match.arg(penalty)
@@ -94,7 +97,8 @@ cv.coxtrans <- function(
       fit <- tryCatch(
         coxtrans(formula, data[-ti, ], group[-ti], target,
           lambda1 = l1, lambda2 = l2, lambda3 = l3,
-          prior_matrix = prior_matrix, penalty = penalty, ...
+          prior_matrix = prior_matrix, penalty = penalty,
+          nthreads = nthreads, ...
         ),
         error = function(e) NULL
       )
@@ -185,14 +189,16 @@ cv.coxtrans <- function(
     lambda1 = lambda_min$lambda1,
     lambda2 = lambda_min$lambda2,
     lambda3 = lambda_min$lambda3,
-    prior_matrix = prior_matrix, penalty = penalty, ...
+    prior_matrix = prior_matrix, penalty = penalty,
+    nthreads = nthreads, ...
   )
 
   final_fit_1se <- coxtrans(formula, data, group, target,
     lambda1 = lambda_1se$lambda1,
     lambda2 = lambda_1se$lambda2,
     lambda3 = lambda_1se$lambda3,
-    prior_matrix = prior_matrix, penalty = penalty, ...
+    prior_matrix = prior_matrix, penalty = penalty,
+    nthreads = nthreads, ...
   )
 
   structure(list(
@@ -318,6 +324,7 @@ plot.cv.coxtrans <- function(x, ...) {
   invisible(x)
 }
 
+#' @param object A \code{cv.coxtrans} object.
 #' @param s Which model to extract: \code{"lambda.min"} (default) or
 #'   \code{"lambda.1se"}.
 #' @rdname cv.coxtrans
