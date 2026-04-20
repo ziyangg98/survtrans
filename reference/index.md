@@ -5,6 +5,8 @@
 - [`coxtrans()`](http://gongziyang.com/survtrans/reference/coxtrans.md)
   : Transfer Learning Cox Model with Prior Constraints
 - [`cv.coxtrans()`](http://gongziyang.com/survtrans/reference/cv.coxtrans.md)
+  [`coef(`*`<cv.coxtrans>`*`)`](http://gongziyang.com/survtrans/reference/cv.coxtrans.md)
+  [`predict(`*`<cv.coxtrans>`*`)`](http://gongziyang.com/survtrans/reference/cv.coxtrans.md)
   : Cross-validated tuning for coxtrans
 
 ## Inference

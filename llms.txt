@@ -113,9 +113,11 @@ summary(fit2)
 [`cv.coxtrans()`](http://gongziyang.com/survtrans/reference/cv.coxtrans.md)
 selects all three penalty parameters jointly via K-fold cross-validation
 over a full `lambda1 × lambda2 × lambda3` grid, minimising the held-out
-partial likelihood deviance (lambda.min rule, consistent with
-**glmnet**). It returns a `cv.coxtrans` object with CV diagnostics and
-the final refitted model.
+partial likelihood deviance. It supports both the **lambda.min** rule
+(minimum CV deviance) and the **lambda.1se** rule (most sparse model
+within one standard error of the minimum, consistent with **glmnet**).
+It returns a `cv.coxtrans` object with CV diagnostics and the final
+refitted models at both rules.
 
 ``` r
 cv_fit <- cv.coxtrans(
@@ -130,8 +132,10 @@ cv_fit
 #> Measure: Partial Likelihood Deviance
 #> 
 #> lambda.min:  l1=0.0713  l2=0.0559  l3=0.2154
-#> CV deviance: 3.2737 (+/- 0.1128)
-#> Non-zero:    4 (target group)
+#>   Deviance:  3.2737 (+/- 0.1128)   Non-zero: 4
+#> 
+#> lambda.1se:  l1=0.0713  l2=0.0559  l3=0.2154
+#>   Deviance:  3.2737 (+/- 0.1128)   Non-zero: 4
 ```
 
 The CV curve along the `lambda1` axis (with `lambda2` and `lambda3`
@@ -145,7 +149,10 @@ plot(cv_fit)
 ![Cross-validation curve for
 cv.coxtrans](reference/figures/README-cv-plot-1.png)
 
-Access the final fitted model and its summary via `$coxtrans.fit`:
+Access the final fitted model via `$coxtrans.fit` (lambda.min) or
+`$coxtrans.fit.1se` (lambda.1se). Use `coef(cv_fit, s = "lambda.1se")`
+or `predict(cv_fit, s = "lambda.1se", ...)` to extract from the sparser
+model.
 
 ``` r
 summary(cv_fit$coxtrans.fit)
@@ -224,6 +231,8 @@ Function](reference/figures/README-basehaz-1.png)
 - [`coxtrans()`](http://gongziyang.com/survtrans/reference/coxtrans.md)
   : Transfer Learning Cox Model with Prior Constraints
 - [`cv.coxtrans()`](http://gongziyang.com/survtrans/reference/cv.coxtrans.md)
+  [`coef(`*`<cv.coxtrans>`*`)`](http://gongziyang.com/survtrans/reference/cv.coxtrans.md)
+  [`predict(`*`<cv.coxtrans>`*`)`](http://gongziyang.com/survtrans/reference/cv.coxtrans.md)
   : Cross-validated tuning for coxtrans
 
 ## Inference

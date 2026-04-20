@@ -156,7 +156,7 @@
 <div class="section level3">
 <h3 id="automatic-tuning">Automatic tuning<a class="anchor" aria-label="anchor" href="#automatic-tuning"></a>
 </h3>
-<p><code><a href="reference/cv.coxtrans.html">cv.coxtrans()</a></code> selects all three penalty parameters jointly via K-fold cross-validation over a full <code>lambda1 × lambda2 × lambda3</code> grid, minimising the held-out partial likelihood deviance (lambda.min rule, consistent with <strong>glmnet</strong>). It returns a <code>cv.coxtrans</code> object with CV diagnostics and the final refitted model.</p>
+<p><code><a href="reference/cv.coxtrans.html">cv.coxtrans()</a></code> selects all three penalty parameters jointly via K-fold cross-validation over a full <code>lambda1 × lambda2 × lambda3</code> grid, minimising the held-out partial likelihood deviance. It supports both the <strong>lambda.min</strong> rule (minimum CV deviance) and the <strong>lambda.1se</strong> rule (most sparse model within one standard error of the minimum, consistent with <strong>glmnet</strong>). It returns a <code>cv.coxtrans</code> object with CV diagnostics and the final refitted models at both rules.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cv_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/cv.coxtrans.html">cv.coxtrans</a></span><span class="op">(</span></span>
 <span>  <span class="va">formula</span>, <span class="va">sim2</span>, <span class="va">sim2</span><span class="op">$</span><span class="va">group</span>, target <span class="op">=</span> <span class="fl">1</span>, penalty <span class="op">=</span> <span class="st">"SCAD"</span>, ncores <span class="op">=</span> <span class="fl">8</span></span>
@@ -170,13 +170,15 @@
 <span><span class="co">#&gt; Measure: Partial Likelihood Deviance</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; lambda.min:  l1=0.0713  l2=0.0559  l3=0.2154</span></span>
-<span><span class="co">#&gt; CV deviance: 3.2737 (+/- 0.1128)</span></span>
-<span><span class="co">#&gt; Non-zero:    4 (target group)</span></span></code></pre></div>
+<span><span class="co">#&gt;   Deviance:  3.2737 (+/- 0.1128)   Non-zero: 4</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; lambda.1se:  l1=0.0713  l2=0.0559  l3=0.2154</span></span>
+<span><span class="co">#&gt;   Deviance:  3.2737 (+/- 0.1128)   Non-zero: 4</span></span></code></pre></div>
 <p>The CV curve along the <code>lambda1</code> axis (with <code>lambda2</code> and <code>lambda3</code> fixed at their optimal values) can be visualised with <code><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot()</a></code>:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">cv_fit</span><span class="op">)</span></span></code></pre></div>
 <p><img src="reference/figures/README-cv-plot-1.png" alt="Cross-validation curve for cv.coxtrans" width="100%"></p>
-<p>Access the final fitted model and its summary via <code>$coxtrans.fit</code>:</p>
+<p>Access the final fitted model via <code>$coxtrans.fit</code> (lambda.min) or <code>$coxtrans.fit.1se</code> (lambda.1se). Use <code>coef(cv_fit, s = "lambda.1se")</code> or <code>predict(cv_fit, s = "lambda.1se", ...)</code> to extract from the sparser model.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">cv_fit</span><span class="op">$</span><span class="va">coxtrans.fit</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Call:</span></span>

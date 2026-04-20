@@ -1,8 +1,9 @@
 # Cross-validated tuning for coxtrans
 
 Selects penalty parameters by minimising the held-out partial likelihood
-deviance over a full `lambda1 x lambda2 x lambda3` grid (lambda.min
-rule).
+deviance over a full `lambda1 x lambda2 x lambda3` grid. Supports both
+the `lambda.min` rule (minimum CV deviance) and the `lambda.1se` rule
+(most sparse model within one standard error of the minimum).
 
 ## Usage
 
@@ -22,6 +23,12 @@ cv.coxtrans(
   verbose = FALSE,
   ...
 )
+
+# S3 method for class 'cv.coxtrans'
+coef(object, s = c("lambda.min", "lambda.1se"), ...)
+
+# S3 method for class 'cv.coxtrans'
+predict(object, s = c("lambda.min", "lambda.1se"), ...)
 ```
 
 ## Arguments
@@ -80,13 +87,19 @@ cv.coxtrans(
   Passed to
   [`coxtrans`](http://gongziyang.com/survtrans/reference/coxtrans.md).
 
+- s:
+
+  Which model to predict from: `"lambda.min"` (default) or
+  `"lambda.1se"`.
+
 ## Value
 
 An object of class `cv.coxtrans` with fields: `grid` (full lambda grid),
 `cvm` (mean deviance per grid point), `cvsd`, `cvup`, `cvlo`, `nzero`
 (mean non-zero target coefficients), `lambda.min` (optimal lambda list),
-`index` (grid row of optimum), `coxtrans.fit` (final model), `call`,
-`name`.
+`lambda.1se` (1SE-rule lambda list), `index.min`, `index.1se`,
+`coxtrans.fit` (final model at lambda.min), `coxtrans.fit.1se` (final
+model at lambda.1se), `call`, `name`.
 
 ## Examples
 
@@ -104,6 +117,8 @@ result
 #> Measure: Partial Likelihood Deviance
 #> 
 #> lambda.min:  l1=0.0588  l2=0.0177  l3=0.2154
-#> CV deviance: 3.2739 (+/- 0.1211)
-#> Non-zero:    5 (target group)
+#>   Deviance:  3.2739 (+/- 0.1211)   Non-zero: 5
+#> 
+#> lambda.1se:  l1=0.0588  l2=0.0006  l3=2e-04
+#>   Deviance:  3.3161 (+/- 0.1089)   Non-zero: 4
 ```
