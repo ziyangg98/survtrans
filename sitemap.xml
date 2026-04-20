@@ -17,6 +17,7 @@
 <url><loc>http://gongziyang.com/survtrans/reference/coef.coxtrans.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/coef.ncvcox.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/coxtrans.html</loc></url>
+<url><loc>http://gongziyang.com/survtrans/reference/cv.coxtrans.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/diagnose.coxtrans.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/diagnose.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/index.html</loc></url>
@@ -24,12 +25,15 @@
 <url><loc>http://gongziyang.com/survtrans/reference/logLik.ncvcox.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/ncvcox.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/penalty_value.html</loc></url>
+<url><loc>http://gongziyang.com/survtrans/reference/plot.cv.coxtrans.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/predict.coxtrans.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/predict.ncvcox.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/preprocess.html</loc></url>
+<url><loc>http://gongziyang.com/survtrans/reference/print.coxtrans.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/print.summary.coxtrans.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/print.summary.ncvcox.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/reexports.html</loc></url>
+<url><loc>http://gongziyang.com/survtrans/reference/refit.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/sim2.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/simsurv_tl.html</loc></url>
 <url><loc>http://gongziyang.com/survtrans/reference/summary.coxtrans.html</loc></url>

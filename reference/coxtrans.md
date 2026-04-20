@@ -1,6 +1,9 @@
-# Transfer Learning for Cox Model with Global and Local Shrinkage
+# Transfer Learning Cox Model with Prior Constraints
 
-Transfer Learning for Cox Model with Global and Local Shrinkage
+Fits a Cox proportional hazards model that transfers survival
+information from source domains to a target domain using three-layer
+penalization: sparse (lambda1), local sharing (lambda2), and prior
+transfer (lambda3).
 
 ## Usage
 
@@ -13,6 +16,7 @@ coxtrans(
   lambda1 = 0,
   lambda2 = 0,
   lambda3 = 0,
+  prior_matrix = NULL,
   penalty = c("lasso", "MCP", "SCAD"),
   gamma = switch(penalty, SCAD = 3.7, MCP = 3, 1),
   vartheta = 1,
@@ -25,9 +29,8 @@ coxtrans(
 
 - formula:
 
-  A formula object, with the response on the left of a `~` operator, and
-  the terms on the right. The response must be a survival object as
-  returned by the Surv function.
+  A formula with a [`Surv`](https://rdrr.io/pkg/survival/man/Surv.html)
+  response.
 
 - data:
 
@@ -35,63 +38,99 @@ coxtrans(
 
 - group:
 
-  A factor variable indicating the group of each observation.
+  A factor indicating the group of each observation.
 
 - target:
 
-  A character string specifying the target group.
+  The target group level.
 
 - lambda1:
 
-  A non-negative value specifying the sparse penalty parameter. The
-  default is 0.
+  Sparse penalty (non-negative scalar). Default 0.
 
 - lambda2:
 
-  A non-negative value specifying the global biased penalty parameter.
-  The default is 0.
+  Local penalty for source-target coefficient differences (non-negative
+  scalar). Default 0.
 
 - lambda3:
 
-  A non-negative value specifying the local biased penalty parameter.
-  The default is 0.
+  Prior transfer penalty (non-negative scalar or vector of length G).
+  When `prior_matrix` has G rows, `lambda3` should have length G; a
+  scalar is recycled. Default 0.
+
+- prior_matrix:
+
+  Optional G x (K-1) weight matrix defining transfer constraints. Each
+  row specifies a weighted combination of source coefficients that the
+  target should be close to. If `NULL`, a single prior using
+  sample-weighted source means is used.
 
 - penalty:
 
-  A character string specifying the penalty function. The default is
-  "lasso". Other options are "MCP" and "SCAD".
+  Penalty type: `"lasso"`, `"MCP"`, or `"SCAD"`.
 
 - gamma:
 
-  A non-negative value specifying the penalty parameter. The default is
-  3.7 for SCAD and 3.0 for MCP.
+  Concavity parameter for MCP/SCAD. Default 3.7 (SCAD) or 3.0 (MCP).
 
 - vartheta:
 
-  A positive value specifying the fixed penalty parameter in the
-  augmented Lagrangian. Following Wang, Yin & Zeng (2019), this is kept
-  constant (not adaptive) to guarantee convergence with non-convex
-  penalties. The default is 1.0.
+  Fixed augmented Lagrangian parameter. Default 1.0.
 
 - control:
 
-  An object of class
+  A
   [survtrans_control](http://gongziyang.com/survtrans/reference/survtrans_control.md)
-  containing control parameters for the fitting algorithm. Default is
-  `survtrans_control(...)`.
+  object.
 
 - ...:
 
-  Additional arguments to be passed to the fitting algorithm.
+  Additional arguments passed to `survtrans_control`.
 
 ## Value
 
-An object of class `coxtrans`.
+An object of class `coxtrans` with components:
+
+- coefficients:
+
+  Matrix (p x K) of group-specific coefficients. Each column is the full
+  beta for that group (target first).
+
+- prior_matrix:
+
+  The prior weight matrix used.
+
+- prior_effects:
+
+  Matrix of prior constraint residuals.
+
+- active_local:
+
+  Logical matrix (p x K-1) of active local constraints.
+
+- active_prior:
+
+  Logical matrix (p x G) of active prior constraints.
+
+- iter:
+
+  Number of ADMM iterations.
+
+- message:
+
+  Convergence message.
+
+- history:
+
+  Matrix of per-iteration diagnostics.
 
 ## Examples
 
 ``` r
 formula <- Surv(time, status) ~ . - group - id
+
+# Basic usage with default prior (sample-weighted source mean)
 fit <- coxtrans(
   formula, sim2, sim2$group, 1,
   lambda1 = 0.075, lambda2 = 0.04, lambda3 = 0.04, penalty = "SCAD"
@@ -105,15 +144,57 @@ summary(fit)
 #>   n=500, number of events=422
 #> 
 #>       coef exp(coef) se(coef)     z Pr(>|z|)    
-#> X1 0.33676   1.40040  0.05341 6.306 2.87e-10 ***
-#> X2 0.35968   1.43287  0.05402 6.659 2.76e-11 ***
-#> X3 0.34368   1.41012  0.05398 6.367 1.93e-10 ***
-#> X4 0.32553   1.38476  0.05157 6.313 2.75e-10 ***
+#> X1 0.34587   1.41322  0.05340 6.477 9.34e-11 ***
+#> X2 0.35601   1.42762  0.05403 6.589 4.44e-11 ***
+#> X3 0.34327   1.40956  0.05396 6.362 1.99e-10 ***
+#> X4 0.32658   1.38622  0.05155 6.335 2.37e-10 ***
 #> ---
 #> Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
 #>    exp(coef) exp(-coef) lower .95 upper .95
-#> X1 1.4004    0.7141     1.2612    1.5549   
-#> X2 1.4329    0.6979     1.2889    1.5929   
-#> X3 1.4101    0.7092     1.2686    1.5675   
-#> X4 1.3848    0.7221     1.2516    1.5320   
+#> X1 1.4132    0.7076     1.2728    1.5691   
+#> X2 1.4276    0.7005     1.2842    1.5871   
+#> X3 1.4096    0.7094     1.2681    1.5668   
+#> X4 1.3862    0.7214     1.2530    1.5336   
+#> 
+#> Feature structure:
+#>   Prior transfer: X1, X2
+#>   Shared (local): X3, X4
+#>   Sparse (zero) : 16 features (X5, X6, X7, ...)
+
+# Custom prior matrix (two tissue-based priors)
+pm <- rbind(
+  tissue_A = c(0.5, 0.5, 0, 0),
+  tissue_B = c(0, 0, 0.5, 0.5)
+)
+colnames(pm) <- c("2", "3", "4", "5")
+fit2 <- coxtrans(
+  formula, sim2, sim2$group, 1,
+  lambda1 = 0.075, lambda2 = 0.04, lambda3 = c(0.04, 0.04),
+  prior_matrix = pm, penalty = "SCAD"
+)
+summary(fit2)
+#> Call:
+#> coxtrans(formula = formula, data = sim2, group = sim2$group, 
+#>     target = 1, lambda1 = 0.075, lambda2 = 0.04, lambda3 = c(0.04, 
+#>         0.04), prior_matrix = pm, penalty = "SCAD")
+#> 
+#>   n=500, number of events=422
+#> 
+#>       coef exp(coef) se(coef)     z Pr(>|z|)    
+#> X1 0.34289   1.40901  0.06213 5.519 3.40e-08 ***
+#> X2 0.35743   1.42965  0.06567 5.443 5.24e-08 ***
+#> X3 0.34416   1.41081  0.05408 6.364 1.96e-10 ***
+#> X4 0.32464   1.38354  0.05097 6.370 1.90e-10 ***
+#> ---
+#> Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+#>    exp(coef) exp(-coef) lower .95 upper .95
+#> X1 1.4090    0.7097     1.2475    1.5915   
+#> X2 1.4296    0.6995     1.2570    1.6260   
+#> X3 1.4108    0.7088     1.2689    1.5685   
+#> X4 1.3835    0.7228     1.2520    1.5289   
+#> 
+#> Feature structure:
+#>   Prior [tissue_A,tissue_B]: X1, X2
+#>   Shared (local)           : X3, X4
+#>   Sparse (zero)            : 16 features (X5, X6, X7, ...)
 ```

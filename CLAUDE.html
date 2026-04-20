@@ -100,7 +100,7 @@
 </div>
 <div class="section level3">
 <h3 id="coefficients-structure">Coefficients Structure<a class="anchor" aria-label="anchor" href="#coefficients-structure"></a></h3>
-<p><code>coxtrans</code> returns a coefficients matrix with columns <code>[group1, group2, ..., groupK, Center]</code>. Each group’s full beta = <code>coefficients[, group] + coefficients[, "Center"]</code>. The target group is always placed first in the column order.</p>
+<p><code>coxtrans</code> returns a coefficients matrix with columns <code>[target, source1, source2, ..., sourceK-1]</code>. Each column is the full beta for that group (no Center decomposition). The target group is always placed first. An optional <code>prior_matrix</code> parameter (G x (K-1)) defines transfer constraints; <code>lambda3</code> (vector of length G) penalizes each prior. The <code>active_local</code> and <code>active_prior</code> flags indicate which constraints were activated.</p>
 </div>
 <div class="section level3">
 <h3 id="data-flow">Data Flow<a class="anchor" aria-label="anchor" href="#data-flow"></a></h3>

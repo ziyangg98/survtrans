@@ -3,7 +3,9 @@
 ## Fitting
 
 - [`coxtrans()`](http://gongziyang.com/survtrans/reference/coxtrans.md)
-  : Transfer Learning for Cox Model with Global and Local Shrinkage
+  : Transfer Learning Cox Model with Prior Constraints
+- [`cv.coxtrans()`](http://gongziyang.com/survtrans/reference/cv.coxtrans.md)
+  : Cross-validated tuning for coxtrans
 
 ## Inference
 
@@ -27,6 +29,11 @@
 
   Summary method for a `coxtrans` object
 
+- [`print(`*`<coxtrans>`*`)`](http://gongziyang.com/survtrans/reference/print.coxtrans.md)
+  :
+
+  Print method for a `coxtrans` object
+
 - [`print(`*`<summary.coxtrans>`*`)`](http://gongziyang.com/survtrans/reference/print.summary.coxtrans.md)
   :
 
@@ -34,6 +41,9 @@
 
 - [`diagnose(`*`<coxtrans>`*`)`](http://gongziyang.com/survtrans/reference/diagnose.coxtrans.md)
   : Diagnose Cox Transfer Model's Optimization Process
+
+- [`refit()`](http://gongziyang.com/survtrans/reference/refit.md) :
+  Refit a coxtrans model with hard constraints
 
 ## Prediction
 
@@ -46,6 +56,11 @@
   :
 
   Prediction method for `coxtrans` objects.
+
+- [`plot(`*`<cv.coxtrans>`*`)`](http://gongziyang.com/survtrans/reference/plot.cv.coxtrans.md)
+  :
+
+  Plot cross-validation curve for a `cv.coxtrans` object
 
 ## Utils
 

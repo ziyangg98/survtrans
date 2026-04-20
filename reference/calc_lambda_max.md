@@ -5,7 +5,7 @@ Calculate the maximum value of the penalty parameter lambda
 ## Usage
 
 ``` r
-calc_lambda_max(formula, data, group, offset)
+calc_lambda_max(formula, data, group, offset = NULL)
 ```
 
 ## Arguments

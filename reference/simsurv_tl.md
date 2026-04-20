@@ -5,7 +5,17 @@ Simulate survival data for a multi-source Cox model
 ## Usage
 
 ``` r
-simsurv_tl(beta, eta, lambda, gamma, dist, maxt, n_samples, seed = 0)
+simsurv_tl(
+  beta,
+  eta,
+  lambda,
+  gamma,
+  dist,
+  maxt,
+  n_samples,
+  seed = 0,
+  sigma = NULL
+)
 ```
 
 ## Arguments
@@ -47,6 +57,11 @@ simsurv_tl(beta, eta, lambda, gamma, dist, maxt, n_samples, seed = 0)
 - seed:
 
   An integer specifying the random seed, with a default value of 0.
+
+- sigma:
+
+  An optional p x p covariance matrix for the covariates. If `NULL`
+  (default), an identity matrix is used.
 
 ## Value
 

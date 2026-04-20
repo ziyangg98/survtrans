@@ -42,7 +42,17 @@
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">simsurv_tl</span><span class="op">(</span><span class="va">beta</span>, <span class="va">eta</span>, <span class="va">lambda</span>, <span class="va">gamma</span>, <span class="va">dist</span>, <span class="va">maxt</span>, <span class="va">n_samples</span>, seed <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">simsurv_tl</span><span class="op">(</span></span>
+<span>  <span class="va">beta</span>,</span>
+<span>  <span class="va">eta</span>,</span>
+<span>  <span class="va">lambda</span>,</span>
+<span>  <span class="va">gamma</span>,</span>
+<span>  <span class="va">dist</span>,</span>
+<span>  <span class="va">maxt</span>,</span>
+<span>  <span class="va">n_samples</span>,</span>
+<span>  seed <span class="op">=</span> <span class="fl">0</span>,</span>
+<span>  sigma <span class="op">=</span> <span class="cn">NULL</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -85,6 +95,11 @@ group, or a single number specifying the total number of samples.</p></dd>
 
 <dt id="arg-seed">seed<a class="anchor" aria-label="anchor" href="#arg-seed"></a></dt>
 <dd><p>An integer specifying the random seed, with a default value of 0.</p></dd>
+
+
+<dt id="arg-sigma">sigma<a class="anchor" aria-label="anchor" href="#arg-sigma"></a></dt>
+<dd><p>An optional p x p covariance matrix for the covariates. If
+<code>NULL</code> (default), an identity matrix is used.</p></dd>
 
 </dl></div>
     <div class="section level2">

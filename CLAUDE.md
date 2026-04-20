@@ -85,9 +85,12 @@ to regenerate `RcppExports.cpp` and `R/RcppExports.R`.
 ### Coefficients Structure
 
 `coxtrans` returns a coefficients matrix with columns
-`[group1, group2, ..., groupK, Center]`. Each group’s full beta =
-`coefficients[, group] + coefficients[, "Center"]`. The target group is
-always placed first in the column order.
+`[target, source1, source2, ..., sourceK-1]`. Each column is the full
+beta for that group (no Center decomposition). The target group is
+always placed first. An optional `prior_matrix` parameter (G x (K-1))
+defines transfer constraints; `lambda3` (vector of length G) penalizes
+each prior. The `active_local` and `active_prior` flags indicate which
+constraints were activated.
 
 ### Data Flow
 
