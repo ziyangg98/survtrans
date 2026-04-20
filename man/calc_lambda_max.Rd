@@ -4,7 +4,7 @@
 \alias{calc_lambda_max}
 \title{Calculate the maximum value of the penalty parameter lambda}
 \usage{
-calc_lambda_max(formula, data, group, offset)
+calc_lambda_max(formula, data, group, offset = NULL)
 }
 \arguments{
 \item{formula}{A formula expression for regression models, in the form

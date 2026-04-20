@@ -377,6 +377,11 @@ coxtrans <- function(
         # All sources local-merged: β₁ = mean(all groups)
         coefficients[j, 1] <- mean(coefficients[j, ])
       }
+      # Prior-induced sparsity: reconstruction below ADMM primal tolerance
+      # is indistinguishable from zero (symmetric to active_sparse).
+      if (abs(coefficients[j, 1]) < control$abstol) {
+        coefficients[j, 1] <- 0
+      }
       # Sync local-merged sources to target
       if (length(shared) > 0) {
         coefficients[j, shared + 1] <- coefficients[j, 1]
@@ -589,7 +594,6 @@ print.coxtrans <- function(x, ...) {
 #' @export
 coef.coxtrans <- function(object, ...) {
   coefficients <- object$coefficients
-  n_groups <- ncol(coefficients)
   n_features <- nrow(coefficients)
   active_prior <- object$active_prior
 
@@ -663,23 +667,6 @@ vcov.coxtrans <- function(object, ...) {
   vcov
 }
 
-
-#' BIC for a \code{coxtrans} object
-#'
-#' Computes the Bayesian Information Criterion using the full stratified
-#' partial log-likelihood and the number of free (non-zero) parameters
-#' returned by \code{\link{coef.coxtrans}}.
-#'
-#' @param object An object of class \code{coxtrans}.
-#' @param ... Additional arguments (unused).
-#' @return A numeric scalar, the BIC value (smaller is better).
-#' @export
-BIC.coxtrans <- function(object, ...) {
-  ll <- logLik(object)
-  df <- sum(coef(object) != 0)
-  d <- sum(object$status)
-  -2 * ll + df * log(d)
-}
 
 #' Log-likelihood for a \code{coxtrans} object
 #'
@@ -776,7 +763,6 @@ summary.coxtrans <- function(object, conf.int = 0.95, target_only = TRUE, ...) {
   a_local <- object$active_local
   a_prior <- object$active_prior
   prior_names <- rownames(object$prior_matrix)
-  n_pri <- ncol(a_prior)
 
   feat_type <- character(n_feat)
   feat_prior_label <- character(n_feat) # which priors are active
@@ -818,7 +804,7 @@ summary.coxtrans <- function(object, conf.int = 0.95, target_only = TRUE, ...) {
   )
 
   class(summary_list) <- "summary.coxtrans"
-  return(summary_list)
+  summary_list
 }
 
 #' Print method for a \code{summary.coxtrans} object
@@ -1088,14 +1074,18 @@ refit.coxtrans <- function(object, ...) {
   }
 
   make_result <- function(coefmat, coxph_fit = NULL, n = 0L, nevent = 0L) {
-    out <- list(coefficients = coefmat, coxph_fit = coxph_fit,
-                n = n, nevent = nevent, active_set = active_set,
-                feature_type = feat_type)
+    out <- list(
+      coefficients = coefmat, coxph_fit = coxph_fit,
+      n = n, nevent = nevent, active_set = active_set,
+      feature_type = feat_type
+    )
     class(out) <- "refit.coxtrans"
     out
   }
 
-  if (length(active_set) == 0) return(make_result(empty_coefmat))
+  if (length(active_set) == 0) {
+    return(make_result(empty_coefmat))
+  }
 
   # 1. Link matrix encoding constraint structure
   link <- build_link_matrix(
@@ -1105,16 +1095,18 @@ refit.coxtrans <- function(object, ...) {
   psi <- coef(object)
   is_nonzero <- psi != 0
   n_free <- sum(is_nonzero)
-  if (n_free == 0) return(make_result(empty_coefmat))
+  if (n_free == 0) {
+    return(make_result(empty_coefmat))
+  }
 
   # 2. Reparametrized design matrix Z
   group_levels <- colnames(object$coefficients)
   group_idxs <- lapply(group_levels, function(g) which(object$group == g))
 
-  Z <- (block_diag(
+  z_mat <- (block_diag(
     lapply(group_idxs, function(idx) object$x[idx, , drop = FALSE])
   ) %*% link)[, is_nonzero, drop = FALSE]
-  colnames(Z) <- paste0("psi", seq_len(n_free))
+  colnames(z_mat) <- paste0("psi", seq_len(n_free))
 
   # 3. Stack response and strata
   time_s <- unlist(lapply(group_idxs, function(idx) object$time[idx]))
@@ -1122,14 +1114,27 @@ refit.coxtrans <- function(object, ...) {
   strata_s <- factor(rep(seq_along(group_idxs), lengths(group_idxs)))
 
   # 4. Unpenalized stratified Cox
-  df_refit <- data.frame(Z, time = time_s, status = status_s, strata_var = strata_s)
-  fml <- stats::as.formula(paste(
-    "survival::Surv(time, status) ~",
-    paste(colnames(Z), collapse = " + "),
-    "+ strata(strata_var)"
-  ))
-  coxph_fit <- tryCatch(survival::coxph(fml, data = df_refit), error = function(e) NULL)
-  if (is.null(coxph_fit)) return(make_result(empty_coefmat))
+  df_refit <- data.frame(
+    z_mat,
+    time = time_s,
+    status = status_s,
+    strata_var = strata_s
+  )
+  fml <- stats::as.formula(
+    paste(
+      "survival::Surv(time, status) ~",
+      paste(colnames(z_mat), collapse = " + "),
+      "+ strata(strata_var)"
+    ),
+    env = list2env(list(strata = survival::strata), parent = baseenv())
+  )
+  coxph_fit <- tryCatch(
+    survival::coxph(fml, data = df_refit),
+    error = function(e) NULL
+  )
+  if (is.null(coxph_fit)) {
+    return(make_result(empty_coefmat))
+  }
 
   # 5. Map back to target coefficients via delta method
   psi_hat <- rep(0, length(psi))
@@ -1138,9 +1143,9 @@ refit.coxtrans <- function(object, ...) {
   target_link <- link[seq_len(p), , drop = FALSE]
   beta <- as.vector(target_link %*% psi_hat)
 
-  L_active <- target_link[, is_nonzero, drop = FALSE]
-  V <- L_active %*% stats::vcov(coxph_fit) %*% t(L_active)
-  se <- sqrt(pmax(diag(V), 0))
+  l_active <- target_link[, is_nonzero, drop = FALSE]
+  v_mat <- l_active %*% stats::vcov(coxph_fit) %*% t(l_active)
+  se <- sqrt(pmax(diag(v_mat), 0))
 
   # 6. Build coefficient matrix
   coefmat <- empty_coefmat
@@ -1155,8 +1160,8 @@ refit.coxtrans <- function(object, ...) {
 
 #' @export
 print.refit.coxtrans <- function(x, digits = max(getOption("digits") - 3, 3),
-                                  signif.stars = getOption("show.signif.stars"),
-                                  ...) {
+                                 signif.stars = getOption("show.signif.stars"),
+                                 ...) {
   cat("Refit coxtrans (unpenalized MLE, hard constraints)\n")
   cat("  n=", x$n, ", events=", x$nevent, "\n\n", sep = "")
 
@@ -1178,7 +1183,9 @@ print.refit.coxtrans <- function(x, digits = max(getOption("digits") - 3, 3),
       cs.ind = 1:3, tst.ind = 4, P.values = TRUE, has.Pvalue = TRUE
     )
   }
-  if (n_omit > 0) cat("  (", n_omit, " non-significant features omitted)\n", sep = "")
+  if (n_omit > 0) {
+    cat("  (", n_omit, " non-significant features omitted)\n", sep = "")
+  }
 
   # Constraint structure
   ft <- x$feature_type[active]
@@ -1186,7 +1193,7 @@ print.refit.coxtrans <- function(x, digits = max(getOption("digits") - 3, 3),
     "Prior transfer" = names(ft[ft == "prior"]),
     "Shared (local)" = names(ft[ft == "shared"]),
     "Partial shared" = names(ft[ft == "partial"]),
-    "Group-specific"  = names(ft[ft == "specific"])
+    "Group-specific" = names(ft[ft == "specific"])
   )
   types <- types[lengths(types) > 0]
   if (length(types) > 0) {
@@ -1194,7 +1201,9 @@ print.refit.coxtrans <- function(x, digits = max(getOption("digits") - 3, 3),
     w <- max(nchar(names(types)))
     for (nm in names(types)) {
       cat("  ", formatC(nm, width = -w), ": ",
-          paste(types[[nm]], collapse = ", "), "\n", sep = "")
+        paste(types[[nm]], collapse = ", "), "\n",
+        sep = ""
+      )
     }
   }
 

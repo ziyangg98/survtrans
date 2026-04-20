@@ -124,28 +124,74 @@ summary(fit2)
 
 ### Automatic tuning
 
-Use `cv.coxtrans()` to select lambdas (CV defines prediction-equivalent
-set, BIC selects simplest model) with sample splitting for valid
-inference:
+`cv.coxtrans()` selects all three penalty parameters jointly via K-fold
+cross-validation over a full `lambda1 × lambda2 × lambda3` grid,
+minimising the held-out partial likelihood deviance. It supports both
+the **lambda.min** rule (minimum CV deviance) and the **lambda.1se**
+rule (most sparse model within one standard error of the minimum,
+consistent with **glmnet**). It returns a `cv.coxtrans` object with CV
+diagnostics and the final refitted models at both rules.
 
 ``` r
 cv_fit <- cv.coxtrans(
-  formula, sim2, sim2$group,
-  target = 1, nlambda = 10, penalty = "SCAD"
+  formula, sim2, sim2$group, target = 1, penalty = "SCAD", ncores = 8
 )
 cv_fit
-#> cv.coxtrans (CV + BIC + sample splitting)
+#> cv.coxtrans
 #> 
-#>   Lambda:    l1=0.0713, l2=0.0559, l3=0.2154
-#>   Selected:  4/20 (p < 0.05) (X1, X2, X3, X4)
+#> Call: cv.coxtrans(formula = formula, data = sim2, group = sim2$group, 
+#>     target = 1, penalty = "SCAD", ncores = 8)
 #> 
-#>        coef exp(coef) se(coef)      z  Pr(>|z|)    
-#> X1 0.346454  1.414044 0.058382 5.9343 2.951e-09 ***
-#> X2 0.341353  1.406849 0.057235 5.9640 2.461e-09 ***
-#> X3 0.353195  1.423609 0.056688 6.2305 4.650e-10 ***
-#> X4 0.317651  1.373896 0.053476 5.9401 2.849e-09 ***
+#> Measure: Partial Likelihood Deviance
+#> 
+#> lambda.min:  l1=0.0713  l2=0.0559  l3=0.2154
+#>   Deviance:  3.2737 (+/- 0.1128)   Non-zero: 4
+#> 
+#> lambda.1se:  l1=0.0713  l2=0.0559  l3=0.2154
+#>   Deviance:  3.2737 (+/- 0.1128)   Non-zero: 4
+```
+
+The CV curve along the `lambda1` axis (with `lambda2` and `lambda3`
+fixed at their optimal values) can be visualised with `plot()`:
+
+``` r
+plot(cv_fit)
+```
+
+<img src="man/figures/README-cv-plot-1.png" alt="Cross-validation curve for cv.coxtrans" width="100%" />
+
+Access the final fitted model via `$coxtrans.fit` (lambda.min) or
+`$coxtrans.fit.1se` (lambda.1se). Use `coef(cv_fit, s = "lambda.1se")`
+or `predict(cv_fit, s = "lambda.1se", ...)` to extract from the sparser
+model.
+
+``` r
+summary(cv_fit$coxtrans.fit)
+#> Call:
+#> coxtrans(formula = formula, data = data, group = group, target = target, 
+#>     lambda1 = lambda_min$lambda1, lambda2 = lambda_min$lambda2, 
+#>     lambda3 = lambda_min$lambda3, prior_matrix = prior_matrix, 
+#>     penalty = penalty)
+#> 
+#>   n=500, number of events=422
+#> 
+#>       coef exp(coef) se(coef)     z Pr(>|z|)    
+#> X1 0.33651   1.40006  0.05321 6.324 2.54e-10 ***
+#> X2 0.35245   1.42255  0.05377 6.554 5.59e-11 ***
+#> X3 0.34137   1.40687  0.05398 6.324 2.54e-10 ***
+#> X4 0.32244   1.38050  0.05138 6.276 3.48e-10 ***
 #> ---
 #> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#>    exp(coef) exp(-coef) lower .95 upper .95
+#> X1 1.4001    0.7143     1.2614    1.5540   
+#> X2 1.4226    0.7030     1.2803    1.5807   
+#> X3 1.4069    0.7108     1.2656    1.5639   
+#> X4 1.3805    0.7244     1.2482    1.5268   
+#> 
+#> Feature structure:
+#>   Prior transfer: X1, X2
+#>   Shared (local): X3, X4
+#>   Sparse (zero) : 16 features (X5, X6, X7, ...)
 ```
 
 ### Baseline hazard

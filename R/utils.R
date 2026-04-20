@@ -17,7 +17,8 @@ basehaz <- function(object, ...) {
 #'
 #' @param object Any object.
 #' @param ... Additional arguments.
-#' @return Called for its side effect of producing diagnostic plots. Returns \code{NULL} invisibly.
+#' @return Called for its side effect of producing diagnostic plots.
+#' Returns \code{NULL} invisibly.
 #' @export
 diagnose <- function(object, ...) {
   UseMethod("diagnose")
@@ -192,7 +193,9 @@ calc_lambda2_max <- function(formula, data, group, target, offset = NULL) {
     stop("target '", target_level, "' not found in group levels")
   }
   source_levels <- setdiff(colnames(scores), target_level)
-  if (length(source_levels) == 0) return(0)
+  if (length(source_levels) == 0) {
+    return(0)
+  }
   target_scores <- scores[, target_level]
   local_scores <- sweep(scores[, source_levels, drop = FALSE], 1, target_scores)
   max(abs(local_scores), na.rm = TRUE)
@@ -209,14 +212,17 @@ calc_lambda3_max <- function(
   }
 
   source_levels <- setdiff(colnames(scores), target_level)
-  if (length(source_levels) == 0) return(0)
+  if (length(source_levels) == 0) {
+    return(0)
+  }
   if (is.null(prior_matrix)) {
     source_sizes <- tabulate(group)[match(source_levels, levels(group))]
     prior_matrix <- matrix(source_sizes / sum(source_sizes), nrow = 1)
     colnames(prior_matrix) <- source_levels
   }
   if (ncol(prior_matrix) != length(source_levels)) {
-    stop("prior_matrix must have ", length(source_levels),
+    stop(
+      "prior_matrix must have ", length(source_levels),
       " columns (one per source)"
     )
   }
@@ -224,7 +230,9 @@ calc_lambda3_max <- function(
   source_scores <- scores[, source_levels, drop = FALSE]
   target_scores <- scores[, target_level]
   lambda3_max <- vapply(seq_len(nrow(prior_matrix)), function(g) {
-    prior_scores <- as.numeric(prior_matrix[g, , drop = FALSE] %*% t(source_scores))
+    prior_scores <- as.numeric(
+      prior_matrix[g, , drop = FALSE] %*% t(source_scores)
+    )
     max(abs(target_scores - prior_scores), na.rm = TRUE)
   }, numeric(1))
   names(lambda3_max) <- rownames(prior_matrix)

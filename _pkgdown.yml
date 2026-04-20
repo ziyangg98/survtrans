@@ -6,18 +6,22 @@ reference:
 - title: "Fitting"
   contents:
   - coxtrans
+  - cv.coxtrans
 - title: "Inference"
   contents:
   - logLik.coxtrans
   - coef.coxtrans
   - vcov.coxtrans
   - summary.coxtrans
+  - print.coxtrans
   - print.summary.coxtrans
   - diagnose.coxtrans
+  - refit
 - title: "Prediction"
   contents:
   - basehaz.coxtrans
   - predict.coxtrans
+  - plot.cv.coxtrans
 - title: Utils
   contents:
   - calc_lambda_max

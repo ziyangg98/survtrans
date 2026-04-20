@@ -132,37 +132,40 @@ test_that("ncvcox basic fit returns correct structure", {
   expect_equal(length(fit$coefficients), 20L)
 })
 
-test_that("cv.coxtrans selects lambdas via sample splitting", {
+test_that("cv.coxtrans returns a cv.coxtrans object with glmnet-like fields", {
   formula <- Surv(time, status) ~ . - group - id
   result <- cv.coxtrans(
-    formula, sim2, sim2$group, target = 1,
-    nlambda = 10, penalty = "SCAD"
+    formula, sim2, sim2$group,
+    target = 1,
+    nlambda = 5, penalty = "SCAD"
   )
 
   expect_s3_class(result, "cv.coxtrans")
-  expect_s3_class(result$fit, "coxtrans")
+  expect_s3_class(result$coxtrans.fit, "coxtrans")
 
-  # best_lambdas
-  expect_true(all(c("lambda1", "lambda2", "lambda3") %in%
-                    names(result$best_lambdas)))
+  # CV diagnostics
+  n_grid <- nrow(result$grid)
+  expect_true(n_grid > 0)
+  expect_equal(length(result$cvm), n_grid)
+  expect_equal(length(result$cvsd), n_grid)
+  expect_equal(length(result$nzero), n_grid)
+  expect_true(any(is.finite(result$cvm)))
 
-  # Coefficients from summary.coxtrans (not refit)
-  expect_true(is.matrix(result$coefficients))
-  expect_equal(nrow(result$coefficients), 20L)
-  expect_equal(ncol(result$coefficients), 5L)
-  expect_equal(colnames(result$coefficients),
-    c("coef", "exp(coef)", "se(coef)", "z", "Pr(>|z|)"))
+  # Optimal lambdas
+  expect_true(
+    all(c("lambda1", "lambda2", "lambda3") %in% names(result$lambda.min))
+  )
+  expect_true(is.numeric(result$lambda.min$lambda1))
 
-  # SE should be positive for active features
-  active <- which(abs(result$fit$coefficients[, 1]) > 1e-6)
-  if (length(active) > 0) {
-    expect_true(all(result$coefficients[active, "se(coef)"] > 0))
-  }
+  # index points into grid
+  expect_equal(result$cvm[result$index], min(result$cvm, na.rm = TRUE))
 
-  # Selection
-  expect_true(is.integer(result$selected))
-  # X1-X4 should all be selected
-  expect_true(all(1:4 %in% result$selected))
+  # coxtrans.fit is valid
+  expect_true(is.matrix(result$coxtrans.fit$coefficients))
+  expect_equal(nrow(result$coxtrans.fit$coefficients), 20L)
+
+  # delegation methods
+  expect_equal(coef(result), coef(result$coxtrans.fit))
 
   # print works
   expect_output(print(result), "cv.coxtrans")
@@ -213,17 +216,22 @@ test_that("lambda1_max is large enough to zero the target sparse block", {
   expect_true(all(fit$coefficients[, "1"] == 0))
 })
 
-test_that("lambda2_max is large enough to merge all source-target differences", {
-  formula <- Surv(time, status) ~ . - group - id
-  l2_max <- survtrans:::calc_lambda2_max(formula, sim2, sim2$group, target = 1)
+test_that(
+  "lambda2_max is large enough to merge all source-target differences",
+  {
+    formula <- Surv(time, status) ~ . - group - id
+    l2_max <- survtrans:::calc_lambda2_max(
+      formula, sim2, sim2$group, target = 1
+    )
 
-  fit <- coxtrans(
-    formula, sim2, sim2$group, 1,
-    lambda1 = 0, lambda2 = l2_max, lambda3 = 0, penalty = "lasso"
-  )
+    fit <- coxtrans(
+      formula, sim2, sim2$group, 1,
+      lambda1 = 0, lambda2 = l2_max, lambda3 = 0, penalty = "lasso"
+    )
 
-  expect_true(all(fit$active_local))
-})
+    expect_true(all(fit$active_local))
+  }
+)
 
 test_that("lambda3_max is large enough to activate the prior block", {
   formula <- Surv(time, status) ~ . - group - id
@@ -237,24 +245,29 @@ test_that("lambda3_max is large enough to activate the prior block", {
   expect_true(all(fit$active_prior[, 1]))
 })
 
-test_that("coxtrans reduces to target-only fit when lambda2 and lambda3 are zero", {
-  formula <- Surv(time, status) ~ . - group - id
-  target_data <- sim2[sim2$group == 1, ]
+test_that(
+  "coxtrans reduces to target-only fit when lambda2 and lambda3 are zero",
+  {
+    formula <- Surv(time, status) ~ . - group - id
+    target_data <- sim2[sim2$group == 1, ]
 
-  fit_transfer <- coxtrans(
-    formula, sim2, sim2$group, 1,
-    lambda1 = 0, lambda2 = 0, lambda3 = 0, penalty = "SCAD"
-  )
-  fit_target <- ncvcox(
-    formula, target_data, target_data$group,
-    lambda = 0, penalty = "SCAD"
-  )
+    fit_transfer <- coxtrans(
+      formula, sim2, sim2$group, 1,
+      lambda1 = 0, lambda2 = 0, lambda3 = 0, penalty = "SCAD"
+    )
+    fit_target <- ncvcox(
+      formula, target_data, target_data$group,
+      lambda = 0, penalty = "SCAD"
+    )
 
-  xt <- as.matrix(target_data[, paste0("X", seq_len(nrow(fit_transfer$coefficients)))])
-  lp_transfer <- as.numeric(xt %*% fit_transfer$coefficients[, "1"])
-  lp_target <- as.numeric(xt %*% fit_target$coefficients)
-  expect_true(stats::cor(lp_transfer, lp_target) > 0.98)
-})
+    xt <- as.matrix(
+      target_data[, paste0("X", seq_len(nrow(fit_transfer$coefficients)))]
+    )
+    lp_transfer <- as.numeric(xt %*% fit_transfer$coefficients[, "1"])
+    lp_target <- as.numeric(xt %*% fit_target$coefficients)
+    expect_true(stats::cor(lp_transfer, lp_target) > 0.98)
+  }
+)
 
 test_that("large lambda2 and lambda3 push coxtrans toward a shared fit", {
   formula <- Surv(time, status) ~ . - group - id
@@ -280,8 +293,10 @@ test_that("refit.coxtrans produces debiased estimates", {
   expect_s3_class(r$coxph_fit, "coxph")
   expect_true(is.matrix(r$coefficients))
   expect_equal(dim(r$coefficients), c(20L, 5L))
-  expect_equal(colnames(r$coefficients),
-               c("coef", "exp(coef)", "se(coef)", "z", "Pr(>|z|)"))
+  expect_equal(
+    colnames(r$coefficients),
+    c("coef", "exp(coef)", "se(coef)", "z", "Pr(>|z|)")
+  )
 
   # Active features should have p < 1
   active <- which(abs(fit$coefficients[, 1]) > 1e-6)

@@ -75,15 +75,34 @@ summary(fit2)
 
 ### Automatic tuning
 
-Use `cv.coxtrans()` to select lambdas (CV defines prediction-equivalent
-set, BIC selects simplest model) with sample splitting for valid inference:
+`cv.coxtrans()` selects all three penalty parameters jointly via K-fold
+cross-validation over a full `lambda1 × lambda2 × lambda3` grid, minimising
+the held-out partial likelihood deviance. It supports both the **lambda.min**
+rule (minimum CV deviance) and the **lambda.1se** rule (most sparse model
+within one standard error of the minimum, consistent with **glmnet**). It
+returns a `cv.coxtrans` object with CV diagnostics and the final refitted
+models at both rules.
 
 ```{r cv}
 cv_fit <- cv.coxtrans(
-  formula, sim2, sim2$group,
-  target = 1, nlambda = 10, penalty = "SCAD"
+  formula, sim2, sim2$group, target = 1, penalty = "SCAD", ncores = 8
 )
 cv_fit
+```
+
+The CV curve along the `lambda1` axis (with `lambda2` and `lambda3` fixed at
+their optimal values) can be visualised with `plot()`:
+
+```{r cv-plot, fig.alt = "Cross-validation curve for cv.coxtrans"}
+plot(cv_fit)
+```
+
+Access the final fitted model via `$coxtrans.fit` (lambda.min) or
+`$coxtrans.fit.1se` (lambda.1se). Use `coef(cv_fit, s = "lambda.1se")` or
+`predict(cv_fit, s = "lambda.1se", ...)` to extract from the sparser model.
+
+```{r cv-summary}
+summary(cv_fit$coxtrans.fit)
 ```
 
 ### Baseline hazard

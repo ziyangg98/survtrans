@@ -135,7 +135,10 @@ ncvcox <- function(
       msg <- "Log-likelihood is not finite. Stopping."
     } else if (n_iterations >= control$maxit) {
       converged <- TRUE
-      msg <- sprintf("Maximum number of iterations reached (%d).", control$maxit)
+      msg <- sprintf(
+        "Maximum number of iterations reached (%d).",
+        control$maxit
+      )
     }
     if (converged) break
   }
@@ -162,7 +165,7 @@ ncvcox <- function(
     x = x
   )
   class(fit) <- "ncvcox"
-  return(fit)
+  fit
 }
 
 #' Extract the coefficients from a \code{ncvcox} object
@@ -233,7 +236,6 @@ logLik.ncvcox <- function(object, ...) {
   status <- object$status
   group <- object$group
   x <- object$x
-  n_groups <- length(unique(group))
   group_levels <- levels(group)
   group_idxs <- lapply(group_levels, function(g) which(group == g))
   coefficients <- object$coefficients

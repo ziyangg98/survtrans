@@ -12,7 +12,8 @@ diagnose(object, ...)
 \item{...}{Additional arguments.}
 }
 \value{
-Called for its side effect of producing diagnostic plots. Returns \code{NULL} invisibly.
+Called for its side effect of producing diagnostic plots.
+Returns \code{NULL} invisibly.
 }
 \description{
 Generic function for diagnose

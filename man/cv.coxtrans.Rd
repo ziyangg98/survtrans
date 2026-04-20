@@ -2,7 +2,9 @@
 % Please edit documentation in R/cv.coxtrans.R
 \name{cv.coxtrans}
 \alias{cv.coxtrans}
-\title{Cross-validated coxtrans with sample splitting inference}
+\alias{coef.cv.coxtrans}
+\alias{predict.cv.coxtrans}
+\title{Cross-validated tuning for coxtrans}
 \usage{
 cv.coxtrans(
   formula,
@@ -10,18 +12,19 @@ cv.coxtrans(
   group,
   target,
   prior_matrix = NULL,
-  nlambda = 50,
+  nlambda = 10,
   lambda.min.ratio = 0.001,
-  nfolds = 5,
+  nfolds = 10,
   penalty = c("lasso", "MCP", "SCAD"),
-  sig_level = 0.05,
-  alpha_eq = 0.05,
-  split_ratio = 0.5,
   ncores = 1,
   seed = 42,
   verbose = FALSE,
   ...
 )
+
+\method{coef}{cv.coxtrans}(object, s = c("lambda.min", "lambda.1se"), ...)
+
+\method{predict}{cv.coxtrans}(object, s = c("lambda.min", "lambda.1se"), ...)
 }
 \arguments{
 \item{formula}{A formula with a \code{\link[survival]{Surv}} response.}
@@ -34,40 +37,45 @@ cv.coxtrans(
 
 \item{prior_matrix}{Optional G x (K-1) transfer constraint matrix.}
 
-\item{nlambda}{Number of lambda values per dimension. Default 50.}
+\item{nlambda}{Number of lambda values per dimension. Default 10.}
 
 \item{lambda.min.ratio}{Smallest/largest lambda ratio. Default 1e-3.}
 
-\item{nfolds}{Number of CV folds. Default 5.}
+\item{nfolds}{Number of CV folds. Default 10.}
 
 \item{penalty}{\code{"lasso"}, \code{"MCP"}, or \code{"SCAD"}.}
 
-\item{sig_level}{Significance level for feature selection. Default 0.05.}
-
-\item{alpha_eq}{Significance level for equivalence test. Default 0.05.}
-
-\item{split_ratio}{Fraction of target data for selection. Default 0.5.}
-
-\item{ncores}{Cores for parallel fold evaluation. Default 1.}
+\item{ncores}{Cores for parallel grid evaluation. Default 1.}
 
 \item{seed}{Random seed.}
 
 \item{verbose}{Print progress.}
 
 \item{...}{Passed to \code{\link{coxtrans}}.}
+
+\item{s}{Which model to predict from: \code{"lambda.min"} (default) or
+\code{"lambda.1se"}.}
 }
 \value{
-Object of class \code{cv.coxtrans}: \code{fit},
-\code{best_lambdas}, \code{selected}, \code{sig_level},
-\code{inference} (summary of inference-half fit).
+An object of class \code{cv.coxtrans} with fields:
+\code{grid} (full lambda grid), \code{cvm} (mean deviance per grid
+point), \code{cvsd}, \code{cvup}, \code{cvlo}, \code{nzero} (mean
+non-zero target coefficients), \code{lambda.min} (optimal lambda list),
+\code{lambda.1se} (1SE-rule lambda list), \code{index.min}, \code{index.1se},
+\code{coxtrans.fit} (final model at lambda.min),
+\code{coxtrans.fit.1se} (final model at lambda.1se),
+\code{call}, \code{name}.
 }
 \description{
-Selects penalty parameters via CV + BIC on a selection half of the
-target data, then fits and performs inference on the held-out inference
-half. This guarantees valid standard errors and coverage.
+Selects penalty parameters by minimising the held-out partial likelihood
+deviance over a full \code{lambda1 x lambda2 x lambda3} grid. Supports both
+the \code{lambda.min} rule (minimum CV deviance) and the \code{lambda.1se}
+rule (most sparse model within one standard error of the minimum).
 }
 \examples{
 result <- cv.coxtrans(Surv(time, status) ~ . - group - id,
-  sim2, sim2$group, target = 1, nlambda = 10, penalty = "SCAD")
+  sim2, sim2$group,
+  target = 1, nlambda = 5, penalty = "SCAD"
+)
 result
 }
