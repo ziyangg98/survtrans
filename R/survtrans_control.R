@@ -8,24 +8,30 @@
 #' \eqn{|L^{k} - L^{k-1}| / (|L^{k-1}| + 1) < fdev}, where \eqn{L} is the
 #' augmented Lagrangian. This provides a fallback when primal-dual residuals
 #' oscillate under non-convex penalties. Default is 1e-5.
+#' @param nthreads the number of OpenMP threads used by a single model fit.
+#' Default is 1.
 #' @param maxit the maximum number of iterations for the proposed algorithm.
 #'  Default is 300.
 #' @param verbose a logical value indicating whether to print messages
 #'  during the fitting process. Default is \code{FALSE}.
 #' @return A list with components \code{abstol}, \code{reltol}, \code{fdev},
-#'  \code{maxit}, and \code{verbose}.
+#'  \code{nthreads}, \code{maxit}, and \code{verbose}.
 #' @keywords internal
 survtrans_control <- function(
-  abstol = 1e-4, reltol = 1e-3, fdev = 1e-5, maxit = 300,
+  abstol = 1e-4, reltol = 1e-3, fdev = 1e-5, nthreads = 1L, maxit = 300,
   verbose = FALSE
 ) {
   if (abstol <= 0) stop("Invalid absolute tolerance")
   if (reltol <= 0) stop("Invalid relative tolerance")
   if (fdev <= 0) stop("Invalid value for fdev")
+  if (!is.numeric(nthreads) || length(nthreads) != 1L || nthreads < 1) {
+    stop("Invalid value for nthreads")
+  }
   if (maxit < 0) stop("Invalid value for iterations")
   if (!is.logical(verbose)) stop("Invalid value for verbose")
   list(
     abstol = abstol, reltol = reltol, fdev = fdev,
+    nthreads = as.integer(nthreads),
     maxit = as.integer(maxit), verbose = verbose
   )
 }

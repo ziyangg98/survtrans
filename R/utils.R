@@ -93,6 +93,74 @@ preprocess <- function(formula, data, group, offset) {
   )
 }
 
+# Internal: capture the rhs design specification used at fit time.
+design_spec <- function(formula, data) {
+  mf <- stats::model.frame(formula, data)
+  terms_rhs <- stats::delete.response(stats::terms(mf))
+  x_template <- stats::model.matrix(terms_rhs, mf)
+  list(
+    terms_rhs = terms_rhs,
+    xlevels = stats::.getXlevels(stats::terms(mf), mf),
+    x_contrasts = attr(x_template, "contrasts")
+  )
+}
+
+# Internal: replay the training design-matrix construction on new data.
+predict_matrix <- function(design_info, newdata, feature_names) {
+  x <- stats::model.matrix(design_info$terms_rhs,
+    newdata,
+    xlev = design_info$xlevels,
+    contrasts.arg = design_info$x_contrasts
+  )
+  if ("(Intercept)" %in% colnames(x)) {
+    x <- x[, colnames(x) != "(Intercept)", drop = FALSE]
+  }
+  if (!setequal(colnames(x), feature_names)) {
+    stop("newdata design matrix columns do not match the fitted model")
+  }
+  x <- x[, feature_names, drop = FALSE]
+  if (!is.null(design_info$x_center)) {
+    x <- sweep(x, 2, design_info$x_center[feature_names], "-")
+  }
+  x
+}
+
+# Internal: validate and align group labels at prediction time.
+check_newgroup <- function(newgroup, group_levels) {
+  group <- factor(newgroup, levels = group_levels)
+  if (anyNA(group)) {
+    invalid_groups <- unique(as.character(newgroup[is.na(group)]))
+    stop(
+      "newgroup contains unseen group labels: ",
+      paste(invalid_groups, collapse = ", ")
+    )
+  }
+  group
+}
+
+# Internal: score observations with group-specific coefficient columns.
+score_by_group <- function(x, group, coefficients) {
+  group_levels <- colnames(coefficients)
+  lp <- numeric(nrow(x))
+  for (k in seq_along(group_levels)) {
+    idx <- which(group == group_levels[k])
+    if (length(idx) > 0L) {
+      lp[idx] <- x[idx, , drop = FALSE] %*% coefficients[, k]
+    }
+  }
+  lp
+}
+
+# Internal: collect group-wise indices and linear predictors.
+group_lp <- function(x, group, coefficients) {
+  group_levels <- colnames(coefficients)
+  list(
+    lp = score_by_group(x, group, coefficients),
+    group_idxs = lapply(group_levels, function(g) which(group == g)),
+    group_levels = group_levels
+  )
+}
+
 
 #' Compute penalty for a numeric vector using specified regularization type.
 #'
@@ -366,6 +434,53 @@ block_diag <- function(blocks) {
     c_off <- c_off + nc
   }
   result
+}
+
+make_group_parameter_names <- function(feature_names, group_levels) {
+  unlist(lapply(group_levels, function(g) {
+    paste(feature_names, g, sep = ":")
+  }))
+}
+
+theta_to_matrix <- function(theta, n_features, group_levels, feature_names) {
+  coefficients <- matrix(as.numeric(theta), nrow = n_features)
+  colnames(coefficients) <- group_levels
+  rownames(coefficients) <- feature_names
+  coefficients
+}
+
+null_basis <- function(constraints, n_parameters, tol = 1e-8) {
+  if (is.null(constraints) || nrow(constraints) == 0L) {
+    basis <- diag(n_parameters)
+  } else {
+    sv <- svd(constraints, nu = 0, nv = n_parameters)
+    rank <- sum(sv$d > tol * max(1, sv$d[1]))
+    if (rank >= n_parameters) {
+      basis <- matrix(0, nrow = n_parameters, ncol = 0L)
+    } else {
+      basis <- sv$v[, seq.int(rank + 1L, n_parameters), drop = FALSE]
+    }
+  }
+  colnames(basis) <- if (ncol(basis) == 0L) {
+    character(0)
+  } else {
+    paste0("phi", seq_len(ncol(basis)))
+  }
+  basis
+}
+
+project_to_basis <- function(theta, basis) {
+  if (ncol(basis) == 0L) {
+    return(numeric(0))
+  }
+  as.numeric(crossprod(basis, theta))
+}
+
+safe_solve <- function(x) {
+  tryCatch(
+    solve(x),
+    error = function(e) MASS::ginv(x)
+  )
 }
 
 #' @importFrom utils head

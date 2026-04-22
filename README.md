@@ -24,6 +24,10 @@ source domain(s) to a target domain with three-layer penalization:
 - **Prior transfer** (lambda3): incorporates prior knowledge about which
   source groups are informative via a customizable weight matrix
 
+It also includes a symmetric multi-task variant, `coxmtl()`, which fits
+all groups jointly without choosing a single target and uses
+user-defined global centers.
+
 ## Installation
 
 You can install the development version of **survtrans** with:
@@ -76,6 +80,79 @@ summary(fit)
 The model correctly identifies the three-layer structure: X1 and X2 are
 transferred via the prior constraint, X3 and X4 are shared across all
 groups via local shrinkage, and X5–X20 are sparse (zero).
+
+### Symmetric multi-task fit
+
+`coxmtl()` replaces the target/source decomposition with a fully
+symmetric fit across all groups. The user supplies a matrix `w` whose
+rows define global centers, and `lambda3` shrinks each group-specific
+coefficient toward those centers.
+
+``` r
+w <- matrix(rep(1 / 5, 5), nrow = 1)
+colnames(w) <- levels(factor(sim2$group))
+
+fit_mtl <- coxmtl(
+  formula, sim2, sim2$group, w,
+  lambda1 = 0.03, lambda2 = 0.01, lambda3 = 0.01,
+  penalty = "SCAD"
+)
+summary(fit_mtl)
+#> Call:
+#> coxmtl(formula = formula, data = sim2, group = sim2$group, w = w, 
+#>     lambda1 = 0.03, lambda2 = 0.01, lambda3 = 0.01, penalty = "SCAD")
+#> 
+#>   n=500, number of events=422, df=6
+#> 
+#>          coef exp(coef) se(coef)      z Pr(>|z|)    
+#> X1:1  0.33359   1.39597  0.05163  6.462 1.04e-10 ***
+#> X2:1  0.35172   1.42151  0.05306  6.629 3.38e-11 ***
+#> X3:1  0.34057   1.40575  0.05333  6.386 1.70e-10 ***
+#> X4:1  0.31741   1.37356  0.04987  6.365 1.95e-10 ***
+#> X1:2  0.90022   2.46016  0.08584 10.487  < 2e-16 ***
+#> X2:2  0.90614   2.47476  0.08396 10.793  < 2e-16 ***
+#> X3:2  0.34057   1.40575  0.05333  6.386 1.70e-10 ***
+#> X4:2  0.31741   1.37356  0.04987  6.365 1.95e-10 ***
+#> X1:3 -0.23305   0.79212  0.06983 -3.338 0.000845 ***
+#> X2:3 -0.20271   0.81652  0.07850 -2.582 0.009812 ** 
+#> X3:3  0.34057   1.40575  0.05333  6.386 1.70e-10 ***
+#> X4:3  0.31741   1.37356  0.04987  6.365 1.95e-10 ***
+#> X1:4  0.90022   2.46016  0.08584 10.487  < 2e-16 ***
+#> X2:4  0.90614   2.47476  0.08396 10.793  < 2e-16 ***
+#> X3:4  0.34057   1.40575  0.05333  6.386 1.70e-10 ***
+#> X4:4  0.31741   1.37356  0.04987  6.365 1.95e-10 ***
+#> X1:5 -0.23305   0.79212  0.06983 -3.338 0.000845 ***
+#> X2:5 -0.20271   0.81652  0.07850 -2.582 0.009812 ** 
+#> X3:5  0.34057   1.40575  0.05333  6.386 1.70e-10 ***
+#> X4:5  0.31741   1.37356  0.04987  6.365 1.95e-10 ***
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#>      exp(coef) exp(-coef) lower .95 upper .95
+#> X1:1 1.3960    0.7163     1.2616    1.5446   
+#> X2:1 1.4215    0.7035     1.2811    1.5773   
+#> X3:1 1.4057    0.7114     1.2662    1.5606   
+#> X4:1 1.3736    0.7280     1.2457    1.5146   
+#> X1:2 2.4602    0.4065     2.0792    2.9109   
+#> X2:2 2.4748    0.4041     2.0993    2.9174   
+#> X3:2 1.4057    0.7114     1.2662    1.5606   
+#> X4:2 1.3736    0.7280     1.2457    1.5146   
+#> X1:3 0.7921    1.2624     0.6908    0.9083   
+#> X2:3 0.8165    1.2247     0.7001    0.9523   
+#> X3:3 1.4057    0.7114     1.2662    1.5606   
+#> X4:3 1.3736    0.7280     1.2457    1.5146   
+#> X1:4 2.4602    0.4065     2.0792    2.9109   
+#> X2:4 2.4748    0.4041     2.0993    2.9174   
+#> X3:4 1.4057    0.7114     1.2662    1.5606   
+#> X4:4 1.3736    0.7280     1.2457    1.5146   
+#> X1:5 0.7921    1.2624     0.6908    0.9083   
+#> X2:5 0.8165    1.2247     0.7001    0.9523   
+#> X3:5 1.4057    0.7114     1.2662    1.5606   
+#> X4:5 1.3736    0.7280     1.2457    1.5146   
+#> 
+#> Global centers (w):
+#>    1   2   3   4   5  
+#> w1 0.2 0.2 0.2 0.2 0.2
+```
 
 ### Custom prior matrix
 
@@ -171,7 +248,7 @@ summary(cv_fit$coxtrans.fit)
 #> coxtrans(formula = formula, data = data, group = group, target = target, 
 #>     lambda1 = lambda_min$lambda1, lambda2 = lambda_min$lambda2, 
 #>     lambda3 = lambda_min$lambda3, prior_matrix = prior_matrix, 
-#>     penalty = penalty)
+#>     penalty = penalty, control = control)
 #> 
 #>   n=500, number of events=422
 #> 

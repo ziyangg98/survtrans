@@ -8,6 +8,7 @@ survtrans_control(
   abstol = 1e-04,
   reltol = 0.001,
   fdev = 1e-05,
+  nthreads = 1L,
   maxit = 300,
   verbose = FALSE
 )
@@ -25,6 +26,9 @@ convergence. The algorithm stops when
 augmented Lagrangian. This provides a fallback when primal-dual residuals
 oscillate under non-convex penalties. Default is 1e-5.}
 
+\item{nthreads}{the number of OpenMP threads used by a single model fit.
+Default is 1.}
+
 \item{maxit}{the maximum number of iterations for the proposed algorithm.
 Default is 300.}
 
@@ -33,7 +37,7 @@ during the fitting process. Default is \code{FALSE}.}
 }
 \value{
 A list with components \code{abstol}, \code{reltol}, \code{fdev},
-\code{maxit}, and \code{verbose}.
+\code{nthreads}, \code{maxit}, and \code{verbose}.
 }
 \description{
 Ancillary arguments for controlling survtrans fitting

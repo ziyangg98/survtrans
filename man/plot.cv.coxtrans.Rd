@@ -14,5 +14,5 @@
 \description{
 Plots the CV deviance profile along \code{lambda1} with \code{lambda2} and
 \code{lambda3} fixed at their optimal values, in the style of
-\code{\link[glmnet]{plot.cv.glmnet}}.
+\code{plot.cv.glmnet}.
 }

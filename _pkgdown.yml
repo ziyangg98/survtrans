@@ -6,21 +6,31 @@ reference:
 - title: "Fitting"
   contents:
   - coxtrans
+  - coxmtl
   - cv.coxtrans
 - title: "Inference"
   contents:
   - logLik.coxtrans
+  - logLik.coxmtl
   - coef.coxtrans
+  - coef.coxmtl
   - vcov.coxtrans
+  - vcov.coxmtl
   - summary.coxtrans
+  - summary.coxmtl
   - print.coxtrans
+  - print.coxmtl
   - print.summary.coxtrans
+  - print.summary.coxmtl
+  - BIC.coxmtl
   - diagnose.coxtrans
   - refit
 - title: "Prediction"
   contents:
   - basehaz.coxtrans
+  - basehaz.coxmtl
   - predict.coxtrans
+  - predict.coxmtl
   - plot.cv.coxtrans
 - title: Utils
   contents:

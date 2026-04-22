@@ -17,9 +17,9 @@ cv.coxtrans(
   nfolds = 10,
   penalty = c("lasso", "MCP", "SCAD"),
   ncores = 1,
-  nthreads = 1L,
   seed = 42,
   verbose = FALSE,
+  control = survtrans_control(),
   ...
 )
 
@@ -49,12 +49,12 @@ cv.coxtrans(
 \item{ncores}{Number of R worker processes for parallel grid evaluation.
 Default 1.}
 
-\item{nthreads}{Number of OpenMP threads per \code{coxtrans()} call.
-Default 1. Total CPU usage is \code{ncores x nthreads}.}
-
 \item{seed}{Random seed.}
 
 \item{verbose}{Print progress.}
+
+\item{control}{A \link{survtrans_control} object passed to each
+\code{coxtrans()} fit. Default \code{survtrans_control()}.}
 
 \item{...}{Passed to \code{\link{coxtrans}}.}
 

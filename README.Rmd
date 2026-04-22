@@ -28,6 +28,10 @@ knitr::opts_chunk$set(
 - **Local** (lambda2): shrinks source-target coefficient differences, encouraging shared effects
 - **Prior transfer** (lambda3): incorporates prior knowledge about which source groups are informative via a customizable weight matrix
 
+It also includes a symmetric multi-task variant, `coxmtl()`, which fits all
+groups jointly without choosing a single target and uses user-defined global
+centers.
+
 ## Installation
 
 You can install the development version of **survtrans** with:
@@ -53,6 +57,25 @@ summary(fit)
 ```
 
 The model correctly identifies the three-layer structure: X1 and X2 are transferred via the prior constraint, X3 and X4 are shared across all groups via local shrinkage, and X5--X20 are sparse (zero).
+
+### Symmetric multi-task fit
+
+`coxmtl()` replaces the target/source decomposition with a fully symmetric fit
+across all groups. The user supplies a matrix `w` whose rows define global
+centers, and `lambda3` shrinks each group-specific coefficient toward those
+centers.
+
+```{r coxmtl}
+w <- matrix(rep(1 / 5, 5), nrow = 1)
+colnames(w) <- levels(factor(sim2$group))
+
+fit_mtl <- coxmtl(
+  formula, sim2, sim2$group, w,
+  lambda1 = 0.03, lambda2 = 0.01, lambda3 = 0.01,
+  penalty = "SCAD"
+)
+summary(fit_mtl)
+```
 
 ### Custom prior matrix
 

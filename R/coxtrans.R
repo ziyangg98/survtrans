@@ -23,10 +23,6 @@
 #' @param gamma Concavity parameter for MCP/SCAD. Default 3.7 (SCAD) or
 #'   3.0 (MCP).
 #' @param vartheta Fixed augmented Lagrangian parameter. Default 1.0.
-#' @param nthreads Number of OpenMP threads for C++ computations. Default 1.
-#'   Set to a higher value to use multiple cores within a single model fit.
-#'   Note: total CPU usage is \code{nthreads} x number of parallel R workers
-#'   (e.g. in \code{cv.coxtrans} with \code{ncores > 1}).
 #' @param control A \link{survtrans_control} object.
 #' @param ... Additional arguments passed to \code{survtrans_control}.
 #'
@@ -77,23 +73,25 @@ coxtrans <- function(
     MCP = 3,
     1
   ), vartheta = 1.0,
-  nthreads = 1L,
   control, ...
 ) {
-  set_omp_threads(as.integer(nthreads))
   penalty <- match.arg(penalty, choices = c("lasso", "MCP", "SCAD"))
   if (missing(control)) control <- survtrans_control(...)
+  set_omp_threads(control$nthreads)
   if (lambda1 < 0 || lambda2 < 0 || any(lambda3 < 0)) {
     stop("Lambda parameters must be non-negative")
   }
+
+  design_info <- design_spec(formula, data)
 
   # Preprocess data
   data <- preprocess(formula, data, group = group)
   x <- data$x
   x_scale <- attr(x, "scaled:scale")
+  x_center <- attr(x, "scaled:center")
   time <- data$time
   status <- data$status
-  group <- data$group
+  group <- droplevels(data$group)
 
   group_levels <- levels(group)
   target_level <- as.character(target)
@@ -426,6 +424,10 @@ coxtrans <- function(
     lambda3 = lambda3,
     gamma = gamma,
     formula = formula,
+    design_info = utils::modifyList(design_info, list(
+      x_center = x_center,
+      x_scale = x_scale
+    )),
     call = match.call(),
     time = time,
     status = status,
@@ -434,25 +436,6 @@ coxtrans <- function(
   )
   class(fit) <- "coxtrans"
   fit
-}
-
-# Internal: compute per-group beta matrix and linear predictor from a
-# coxtrans fit object.
-calc_lp <- function(object) {
-  coefficients <- object$coefficients
-  n_groups <- ncol(coefficients)
-  group_levels <- colnames(coefficients)
-  group_idxs <- lapply(group_levels, function(g) which(object$group == g))
-
-  lp <- numeric(nrow(object$x))
-  for (k in seq_len(n_groups)) {
-    idx <- group_idxs[[k]]
-    lp[idx] <- object$x[idx, ] %*% coefficients[, k]
-  }
-  list(
-    beta = coefficients, lp = lp,
-    group_idxs = group_idxs, group_levels = group_levels
-  )
 }
 
 #' Diagnose Cox Transfer Model's Optimization Process
@@ -682,7 +665,7 @@ vcov.coxtrans <- function(object, ...) {
 #' \code{coxtrans} object.
 #' @export
 logLik.coxtrans <- function(object, ...) {
-  res <- calc_lp(object)
+  res <- group_lp(object$x, object$group, object$coefficients)
   hazard <- exp(res$lp)
   risk_set <- calc_risk_set(hazard, object$time, res$group_idxs)
   sum(object$status * (res$lp - log(risk_set)))
@@ -957,21 +940,26 @@ predict.coxtrans <- function(
 ) {
   type <- match.arg(type)
 
-  coefficients <- object$coefficients
-  n_groups <- ncol(coefficients)
-  group_levels <- colnames(coefficients)
-
-  x <- stats::model.matrix(object$formula, newdata)[, -1]
-  group <- factor(newgroup, levels = levels(object$group))
-
-  lp <- numeric(nrow(x))
-  for (k in seq_len(n_groups)) {
-    idx <- which(group == group_levels[k])
-    if (length(idx) > 0) {
-      lp[idx] <- x[idx, ] %*% coefficients[, k]
+  if (is.null(newdata)) {
+    x <- object$x
+    group <- object$group
+  } else {
+    x <- predict_matrix(
+      object$design_info,
+      newdata,
+      rownames(object$coefficients)
+    )
+    if (is.null(newgroup)) {
+      if ("group" %in% names(newdata)) {
+        newgroup <- newdata$group
+      } else {
+        stop("newgroup must be supplied when newdata has no group column")
+      }
     }
+    group <- check_newgroup(newgroup, levels(object$group))
   }
 
+  lp <- score_by_group(x, group, object$coefficients)
   if (type == "risk") lp <- exp(lp)
   lp
 }
@@ -986,7 +974,7 @@ predict.coxtrans <- function(
 #' strata.
 #' @export
 basehaz.coxtrans <- function(object, ...) {
-  res <- calc_lp(object)
+  res <- group_lp(object$x, object$group, object$coefficients)
   n_groups <- length(res$group_idxs)
   hazard <- exp(res$lp)
   risk_set <- calc_risk_set(hazard, object$time, res$group_idxs)

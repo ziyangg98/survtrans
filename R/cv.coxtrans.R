@@ -16,10 +16,10 @@
 #' @param penalty \code{"lasso"}, \code{"MCP"}, or \code{"SCAD"}.
 #' @param ncores Number of R worker processes for parallel grid evaluation.
 #'   Default 1.
-#' @param nthreads Number of OpenMP threads per \code{coxtrans()} call.
-#'   Default 1. Total CPU usage is \code{ncores x nthreads}.
 #' @param seed Random seed.
 #' @param verbose Print progress.
+#' @param control A \link{survtrans_control} object passed to each
+#'   \code{coxtrans()} fit. Default \code{survtrans_control()}.
 #' @param ... Passed to \code{\link{coxtrans}}.
 #'
 #' @return An object of class \code{cv.coxtrans} with fields:
@@ -43,7 +43,7 @@ cv.coxtrans <- function(
   formula, data, group, target,
   prior_matrix = NULL, nlambda = 10, lambda.min.ratio = 1e-3,
   nfolds = 10, penalty = c("lasso", "MCP", "SCAD"),
-  ncores = 1, nthreads = 1L, seed = 42, verbose = FALSE, ...
+  ncores = 1, seed = 42, verbose = FALSE, control = survtrans_control(), ...
 ) {
   this_call <- match.call()
   penalty <- match.arg(penalty)
@@ -98,7 +98,7 @@ cv.coxtrans <- function(
         coxtrans(formula, data[-ti, ], group[-ti], target,
           lambda1 = l1, lambda2 = l2, lambda3 = l3,
           prior_matrix = prior_matrix, penalty = penalty,
-          nthreads = nthreads, ...
+          control = control, ...
         ),
         error = function(e) NULL
       )
@@ -190,7 +190,7 @@ cv.coxtrans <- function(
     lambda2 = lambda_min$lambda2,
     lambda3 = lambda_min$lambda3,
     prior_matrix = prior_matrix, penalty = penalty,
-    nthreads = nthreads, ...
+    control = control, ...
   )
 
   final_fit_1se <- coxtrans(formula, data, group, target,
@@ -198,7 +198,7 @@ cv.coxtrans <- function(
     lambda2 = lambda_1se$lambda2,
     lambda3 = lambda_1se$lambda3,
     prior_matrix = prior_matrix, penalty = penalty,
-    nthreads = nthreads, ...
+    control = control, ...
   )
 
   structure(list(
@@ -259,7 +259,7 @@ print.cv.coxtrans <- function(x, ...) {
 #'
 #' Plots the CV deviance profile along \code{lambda1} with \code{lambda2} and
 #' \code{lambda3} fixed at their optimal values, in the style of
-#' \code{\link[glmnet]{plot.cv.glmnet}}.
+#' \code{plot.cv.glmnet}.
 #'
 #' @param x A \code{cv.coxtrans} object.
 #' @param ... Further graphical arguments passed to \code{plot}.
