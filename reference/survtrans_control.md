@@ -9,6 +9,7 @@ survtrans_control(
   abstol = 1e-04,
   reltol = 0.001,
   fdev = 1e-05,
+  nthreads = 1L,
   maxit = 300,
   verbose = FALSE
 )
@@ -34,6 +35,10 @@ survtrans_control(
   This provides a fallback when primal-dual residuals oscillate under
   non-convex penalties. Default is 1e-5.
 
+- nthreads:
+
+  the number of OpenMP threads used by a single model fit. Default is 1.
+
 - maxit:
 
   the maximum number of iterations for the proposed algorithm. Default
@@ -46,5 +51,5 @@ survtrans_control(
 
 ## Value
 
-A list with components `abstol`, `reltol`, `fdev`, `maxit`, and
-`verbose`.
+A list with components `abstol`, `reltol`, `fdev`, `nthreads`, `maxit`,
+and `verbose`.

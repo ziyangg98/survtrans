@@ -60,7 +60,6 @@ sparse (lambda1), local sharing (lambda2), and prior transfer (lambda3).</p>
 <span>  penalty <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"lasso"</span>, <span class="st">"MCP"</span>, <span class="st">"SCAD"</span><span class="op">)</span>,</span>
 <span>  gamma <span class="op">=</span> <span class="kw"><a href="https://rdrr.io/r/base/switch.html" class="external-link">switch</a></span><span class="op">(</span><span class="va">penalty</span>, SCAD <span class="op">=</span> <span class="fl">3.7</span>, MCP <span class="op">=</span> <span class="fl">3</span>, <span class="fl">1</span><span class="op">)</span>,</span>
 <span>  vartheta <span class="op">=</span> <span class="fl">1</span>,</span>
-<span>  nthreads <span class="op">=</span> <span class="fl">1L</span>,</span>
 <span>  <span class="va">control</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -120,13 +119,6 @@ a single prior using sample-weighted source means is used.</p></dd>
 
 <dt id="arg-vartheta">vartheta<a class="anchor" aria-label="anchor" href="#arg-vartheta"></a></dt>
 <dd><p>Fixed augmented Lagrangian parameter. Default 1.0.</p></dd>
-
-
-<dt id="arg-nthreads">nthreads<a class="anchor" aria-label="anchor" href="#arg-nthreads"></a></dt>
-<dd><p>Number of OpenMP threads for C++ computations. Default 1.
-Set to a higher value to use multiple cores within a single model fit.
-Note: total CPU usage is <code>nthreads</code> x number of parallel R workers
-(e.g. in <code>cv.coxtrans</code> with <code>ncores &gt; 1</code>).</p></dd>
 
 
 <dt id="arg-control">control<a class="anchor" aria-label="anchor" href="#arg-control"></a></dt>

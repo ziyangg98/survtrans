@@ -4,6 +4,8 @@
 
 - [`coxtrans()`](http://gongziyang.com/survtrans/reference/coxtrans.md)
   : Transfer Learning Cox Model with Prior Constraints
+- [`coxmtl()`](http://gongziyang.com/survtrans/reference/coxmtl.md) :
+  Symmetric Multi-Task Cox Model with Global Centers
 - [`cv.coxtrans()`](http://gongziyang.com/survtrans/reference/cv.coxtrans.md)
   [`coef(`*`<cv.coxtrans>`*`)`](http://gongziyang.com/survtrans/reference/cv.coxtrans.md)
   [`predict(`*`<cv.coxtrans>`*`)`](http://gongziyang.com/survtrans/reference/cv.coxtrans.md)
@@ -16,30 +18,65 @@
 
   Log-likelihood for a `coxtrans` object
 
+- [`logLik(`*`<coxmtl>`*`)`](http://gongziyang.com/survtrans/reference/logLik.coxmtl.md)
+  :
+
+  Log-likelihood for a `coxmtl` object
+
 - [`coef(`*`<coxtrans>`*`)`](http://gongziyang.com/survtrans/reference/coef.coxtrans.md)
   :
 
   Extract the coefficients from a `coxtrans` object
+
+- [`coef(`*`<coxmtl>`*`)`](http://gongziyang.com/survtrans/reference/coef.coxmtl.md)
+  :
+
+  Extract the coefficients from a `coxmtl` object
 
 - [`vcov(`*`<coxtrans>`*`)`](http://gongziyang.com/survtrans/reference/vcov.coxtrans.md)
   :
 
   Variance-covariance matrix for a `coxtrans` object.
 
+- [`vcov(`*`<coxmtl>`*`)`](http://gongziyang.com/survtrans/reference/vcov.coxmtl.md)
+  :
+
+  Variance-covariance matrix for a `coxmtl` object
+
 - [`summary(`*`<coxtrans>`*`)`](http://gongziyang.com/survtrans/reference/summary.coxtrans.md)
   :
 
   Summary method for a `coxtrans` object
+
+- [`summary(`*`<coxmtl>`*`)`](http://gongziyang.com/survtrans/reference/summary.coxmtl.md)
+  :
+
+  Summary method for a `coxmtl` object
 
 - [`print(`*`<coxtrans>`*`)`](http://gongziyang.com/survtrans/reference/print.coxtrans.md)
   :
 
   Print method for a `coxtrans` object
 
+- [`print(`*`<coxmtl>`*`)`](http://gongziyang.com/survtrans/reference/print.coxmtl.md)
+  :
+
+  Print method for a `coxmtl` object
+
 - [`print(`*`<summary.coxtrans>`*`)`](http://gongziyang.com/survtrans/reference/print.summary.coxtrans.md)
   :
 
   Print method for a `summary.coxtrans` object
+
+- [`print(`*`<summary.coxmtl>`*`)`](http://gongziyang.com/survtrans/reference/print.summary.coxmtl.md)
+  :
+
+  Print method for a `summary.coxmtl` object
+
+- [`BIC(`*`<coxmtl>`*`)`](http://gongziyang.com/survtrans/reference/BIC.coxmtl.md)
+  :
+
+  Bayesian Information Criterion for `coxmtl` objects
 
 - [`diagnose(`*`<coxtrans>`*`)`](http://gongziyang.com/survtrans/reference/diagnose.coxtrans.md)
   : Diagnose Cox Transfer Model's Optimization Process
@@ -54,10 +91,20 @@
 
   Predict the cumulative baseline hazard function for `coxtrans` objects
 
+- [`basehaz(`*`<coxmtl>`*`)`](http://gongziyang.com/survtrans/reference/basehaz.coxmtl.md)
+  :
+
+  Predict the cumulative baseline hazard function for `coxmtl` objects
+
 - [`predict(`*`<coxtrans>`*`)`](http://gongziyang.com/survtrans/reference/predict.coxtrans.md)
   :
 
   Prediction method for `coxtrans` objects.
+
+- [`predict(`*`<coxmtl>`*`)`](http://gongziyang.com/survtrans/reference/predict.coxmtl.md)
+  :
+
+  Prediction method for `coxmtl` objects
 
 - [`plot(`*`<cv.coxtrans>`*`)`](http://gongziyang.com/survtrans/reference/plot.cv.coxtrans.md)
   :

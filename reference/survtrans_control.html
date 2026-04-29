@@ -46,6 +46,7 @@
 <span>  abstol <span class="op">=</span> <span class="fl">1e-04</span>,</span>
 <span>  reltol <span class="op">=</span> <span class="fl">0.001</span>,</span>
 <span>  fdev <span class="op">=</span> <span class="fl">1e-05</span>,</span>
+<span>  nthreads <span class="op">=</span> <span class="fl">1L</span>,</span>
 <span>  maxit <span class="op">=</span> <span class="fl">300</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -73,6 +74,11 @@ augmented Lagrangian. This provides a fallback when primal-dual residuals
 oscillate under non-convex penalties. Default is 1e-5.</p></dd>
 
 
+<dt id="arg-nthreads">nthreads<a class="anchor" aria-label="anchor" href="#arg-nthreads"></a></dt>
+<dd><p>the number of OpenMP threads used by a single model fit.
+Default is 1.</p></dd>
+
+
 <dt id="arg-maxit">maxit<a class="anchor" aria-label="anchor" href="#arg-maxit"></a></dt>
 <dd><p>the maximum number of iterations for the proposed algorithm.
 Default is 300.</p></dd>
@@ -86,7 +92,7 @@ during the fitting process. Default is <code>FALSE</code>.</p></dd>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A list with components <code>abstol</code>, <code>reltol</code>, <code>fdev</code>,
-<code>maxit</code>, and <code>verbose</code>.</p>
+<code>nthreads</code>, <code>maxit</code>, and <code>verbose</code>.</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

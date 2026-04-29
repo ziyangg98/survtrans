@@ -65,6 +65,7 @@
 <li>
 <strong>Prior transfer</strong> (lambda3): incorporates prior knowledge about which source groups are informative via a customizable weight matrix</li>
 </ul>
+<p>It also includes a symmetric multi-task variant, <code><a href="reference/coxmtl.html">coxmtl()</a></code>, which fits all groups jointly without choosing a single target and uses user-defined global centers.</p>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
@@ -112,10 +113,79 @@
 <span><span class="co">#&gt;   Sparse (zero) : 16 features (X5, X6, X7, ...)</span></span></code></pre></div>
 <p>The model correctly identifies the three-layer structure: X1 and X2 are transferred via the prior constraint, X3 and X4 are shared across all groups via local shrinkage, and X5–X20 are sparse (zero).</p>
 <div class="section level3">
+<h3 id="symmetric-multi-task-fit">Symmetric multi-task fit<a class="anchor" aria-label="anchor" href="#symmetric-multi-task-fit"></a>
+</h3>
+<p><code><a href="reference/coxmtl.html">coxmtl()</a></code> replaces the target/source decomposition with a fully symmetric fit across all groups. The user supplies a matrix <code>w</code> whose rows define global centers, and <code>lambda3</code> shrinks each group-specific coefficient toward those centers.</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">w</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fl">1</span> <span class="op">/</span> <span class="fl">5</span>, <span class="fl">5</span><span class="op">)</span>, nrow <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">colnames</a></span><span class="op">(</span><span class="va">w</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/levels.html" class="external-link">levels</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span><span class="va">sim2</span><span class="op">$</span><span class="va">group</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">fit_mtl</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/coxmtl.html">coxmtl</a></span><span class="op">(</span></span>
+<span>  <span class="va">formula</span>, <span class="va">sim2</span>, <span class="va">sim2</span><span class="op">$</span><span class="va">group</span>, <span class="va">w</span>,</span>
+<span>  lambda1 <span class="op">=</span> <span class="fl">0.03</span>, lambda2 <span class="op">=</span> <span class="fl">0.01</span>, lambda3 <span class="op">=</span> <span class="fl">0.01</span>,</span>
+<span>  penalty <span class="op">=</span> <span class="st">"SCAD"</span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">fit_mtl</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Call:</span></span>
+<span><span class="co">#&gt; coxmtl(formula = formula, data = sim2, group = sim2$group, w = w, </span></span>
+<span><span class="co">#&gt;     lambda1 = 0.03, lambda2 = 0.01, lambda3 = 0.01, penalty = "SCAD")</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;   n=500, number of events=422, df=6</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;          coef exp(coef) se(coef)      z Pr(&gt;|z|)    </span></span>
+<span><span class="co">#&gt; X1:1  0.33359   1.39597  0.05163  6.462 1.04e-10 ***</span></span>
+<span><span class="co">#&gt; X2:1  0.35172   1.42151  0.05306  6.629 3.38e-11 ***</span></span>
+<span><span class="co">#&gt; X3:1  0.34057   1.40575  0.05333  6.386 1.70e-10 ***</span></span>
+<span><span class="co">#&gt; X4:1  0.31741   1.37356  0.04987  6.365 1.95e-10 ***</span></span>
+<span><span class="co">#&gt; X1:2  0.90022   2.46016  0.08584 10.487  &lt; 2e-16 ***</span></span>
+<span><span class="co">#&gt; X2:2  0.90614   2.47476  0.08396 10.793  &lt; 2e-16 ***</span></span>
+<span><span class="co">#&gt; X3:2  0.34057   1.40575  0.05333  6.386 1.70e-10 ***</span></span>
+<span><span class="co">#&gt; X4:2  0.31741   1.37356  0.04987  6.365 1.95e-10 ***</span></span>
+<span><span class="co">#&gt; X1:3 -0.23305   0.79212  0.06983 -3.338 0.000845 ***</span></span>
+<span><span class="co">#&gt; X2:3 -0.20271   0.81652  0.07850 -2.582 0.009812 ** </span></span>
+<span><span class="co">#&gt; X3:3  0.34057   1.40575  0.05333  6.386 1.70e-10 ***</span></span>
+<span><span class="co">#&gt; X4:3  0.31741   1.37356  0.04987  6.365 1.95e-10 ***</span></span>
+<span><span class="co">#&gt; X1:4  0.90022   2.46016  0.08584 10.487  &lt; 2e-16 ***</span></span>
+<span><span class="co">#&gt; X2:4  0.90614   2.47476  0.08396 10.793  &lt; 2e-16 ***</span></span>
+<span><span class="co">#&gt; X3:4  0.34057   1.40575  0.05333  6.386 1.70e-10 ***</span></span>
+<span><span class="co">#&gt; X4:4  0.31741   1.37356  0.04987  6.365 1.95e-10 ***</span></span>
+<span><span class="co">#&gt; X1:5 -0.23305   0.79212  0.06983 -3.338 0.000845 ***</span></span>
+<span><span class="co">#&gt; X2:5 -0.20271   0.81652  0.07850 -2.582 0.009812 ** </span></span>
+<span><span class="co">#&gt; X3:5  0.34057   1.40575  0.05333  6.386 1.70e-10 ***</span></span>
+<span><span class="co">#&gt; X4:5  0.31741   1.37356  0.04987  6.365 1.95e-10 ***</span></span>
+<span><span class="co">#&gt; ---</span></span>
+<span><span class="co">#&gt; Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1</span></span>
+<span><span class="co">#&gt;      exp(coef) exp(-coef) lower .95 upper .95</span></span>
+<span><span class="co">#&gt; X1:1 1.3960    0.7163     1.2616    1.5446   </span></span>
+<span><span class="co">#&gt; X2:1 1.4215    0.7035     1.2811    1.5773   </span></span>
+<span><span class="co">#&gt; X3:1 1.4057    0.7114     1.2662    1.5606   </span></span>
+<span><span class="co">#&gt; X4:1 1.3736    0.7280     1.2457    1.5146   </span></span>
+<span><span class="co">#&gt; X1:2 2.4602    0.4065     2.0792    2.9109   </span></span>
+<span><span class="co">#&gt; X2:2 2.4748    0.4041     2.0993    2.9174   </span></span>
+<span><span class="co">#&gt; X3:2 1.4057    0.7114     1.2662    1.5606   </span></span>
+<span><span class="co">#&gt; X4:2 1.3736    0.7280     1.2457    1.5146   </span></span>
+<span><span class="co">#&gt; X1:3 0.7921    1.2624     0.6908    0.9083   </span></span>
+<span><span class="co">#&gt; X2:3 0.8165    1.2247     0.7001    0.9523   </span></span>
+<span><span class="co">#&gt; X3:3 1.4057    0.7114     1.2662    1.5606   </span></span>
+<span><span class="co">#&gt; X4:3 1.3736    0.7280     1.2457    1.5146   </span></span>
+<span><span class="co">#&gt; X1:4 2.4602    0.4065     2.0792    2.9109   </span></span>
+<span><span class="co">#&gt; X2:4 2.4748    0.4041     2.0993    2.9174   </span></span>
+<span><span class="co">#&gt; X3:4 1.4057    0.7114     1.2662    1.5606   </span></span>
+<span><span class="co">#&gt; X4:4 1.3736    0.7280     1.2457    1.5146   </span></span>
+<span><span class="co">#&gt; X1:5 0.7921    1.2624     0.6908    0.9083   </span></span>
+<span><span class="co">#&gt; X2:5 0.8165    1.2247     0.7001    0.9523   </span></span>
+<span><span class="co">#&gt; X3:5 1.4057    0.7114     1.2662    1.5606   </span></span>
+<span><span class="co">#&gt; X4:5 1.3736    0.7280     1.2457    1.5146   </span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Global centers (w):</span></span>
+<span><span class="co">#&gt;    1   2   3   4   5  </span></span>
+<span><span class="co">#&gt; w1 0.2 0.2 0.2 0.2 0.2</span></span></code></pre></div>
+</div>
+<div class="section level3">
 <h3 id="custom-prior-matrix">Custom prior matrix<a class="anchor" aria-label="anchor" href="#custom-prior-matrix"></a>
 </h3>
 <p>When source groups have known structure (e.g., tissue type), you can define a prior matrix to encode which sources are informative for the target:</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">pm</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span></span>
 <span>  tissue_A <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.5</span>, <span class="fl">0.5</span>, <span class="fl">0</span>, <span class="fl">0</span><span class="op">)</span>,</span>
 <span>  tissue_B <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">0.5</span>, <span class="fl">0.5</span><span class="op">)</span></span>
@@ -157,7 +227,7 @@
 <h3 id="automatic-tuning">Automatic tuning<a class="anchor" aria-label="anchor" href="#automatic-tuning"></a>
 </h3>
 <p><code><a href="reference/cv.coxtrans.html">cv.coxtrans()</a></code> selects all three penalty parameters jointly via K-fold cross-validation over a full <code>lambda1 × lambda2 × lambda3</code> grid, minimising the held-out partial likelihood deviance. It supports both the <strong>lambda.min</strong> rule (minimum CV deviance) and the <strong>lambda.1se</strong> rule (most sparse model within one standard error of the minimum, consistent with <strong>glmnet</strong>). It returns a <code>cv.coxtrans</code> object with CV diagnostics and the final refitted models at both rules.</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cv_fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/cv.coxtrans.html">cv.coxtrans</a></span><span class="op">(</span></span>
 <span>  <span class="va">formula</span>, <span class="va">sim2</span>, <span class="va">sim2</span><span class="op">$</span><span class="va">group</span>, target <span class="op">=</span> <span class="fl">1</span>, penalty <span class="op">=</span> <span class="st">"SCAD"</span>, ncores <span class="op">=</span> <span class="fl">8</span></span>
 <span><span class="op">)</span></span>
@@ -175,17 +245,17 @@
 <span><span class="co">#&gt; lambda.1se:  l1=0.0713  l2=0.0559  l3=0.2154</span></span>
 <span><span class="co">#&gt;   Deviance:  3.2737 (+/- 0.1128)   Non-zero: 4</span></span></code></pre></div>
 <p>The CV curve along the <code>lambda1</code> axis (with <code>lambda2</code> and <code>lambda3</code> fixed at their optimal values) can be visualised with <code><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot()</a></code>:</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">cv_fit</span><span class="op">)</span></span></code></pre></div>
 <p><img src="reference/figures/README-cv-plot-1.png" alt="Cross-validation curve for cv.coxtrans" width="100%"></p>
 <p>Access the final fitted model via <code>$coxtrans.fit</code> (lambda.min) or <code>$coxtrans.fit.1se</code> (lambda.1se). Use <code>coef(cv_fit, s = "lambda.1se")</code> or <code>predict(cv_fit, s = "lambda.1se", ...)</code> to extract from the sparser model.</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">cv_fit</span><span class="op">$</span><span class="va">coxtrans.fit</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Call:</span></span>
 <span><span class="co">#&gt; coxtrans(formula = formula, data = data, group = group, target = target, </span></span>
 <span><span class="co">#&gt;     lambda1 = lambda_min$lambda1, lambda2 = lambda_min$lambda2, </span></span>
 <span><span class="co">#&gt;     lambda3 = lambda_min$lambda3, prior_matrix = prior_matrix, </span></span>
-<span><span class="co">#&gt;     penalty = penalty)</span></span>
+<span><span class="co">#&gt;     penalty = penalty, control = control)</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt;   n=500, number of events=422</span></span>
 <span><span class="co">#&gt; </span></span>
@@ -210,7 +280,7 @@
 <div class="section level3">
 <h3 id="baseline-hazard">Baseline hazard<a class="anchor" aria-label="anchor" href="#baseline-hazard"></a>
 </h3>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://ggplot2.tidyverse.org" class="external-link">ggplot2</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">basehaz_pred</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/basehaz.html">basehaz</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span>
