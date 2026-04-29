@@ -446,17 +446,34 @@ sum_penalties <- function(values, blocks, penalty, gamma) {
   }, numeric(1)))
 }
 
+#' Print method for a \code{coxmtl} object
+#'
+#' @param x An object of class \code{coxmtl}.
+#' @param ... Additional arguments passed to \code{print.summary.coxmtl}.
+#' @return Invisibly returns \code{x}.
 #' @export
 print.coxmtl <- function(x, ...) {
   print(summary(x), ...)
   invisible(x)
 }
 
+#' Extract the coefficients from a \code{coxmtl} object
+#'
+#' @param object An object of class \code{coxmtl}.
+#' @param ... Additional arguments (unused).
+#' @return A named numeric vector containing the free parameters of the fitted
+#'   \code{coxmtl} object.
 #' @export
 coef.coxmtl <- function(object, ...) {
   object$phi
 }
 
+#' Log-likelihood for a \code{coxmtl} object
+#'
+#' @param object An object of class \code{coxmtl}.
+#' @param ... Additional arguments (unused).
+#' @return A numeric value representing the log-likelihood of the fitted
+#'   \code{coxmtl} object.
 #' @export
 logLik.coxmtl <- function(object, ...) {
   res <- group_lp(object$x, object$group, object$coefficients)
@@ -465,6 +482,18 @@ logLik.coxmtl <- function(object, ...) {
   sum(object$status * (res$lp - log(risk_set)))
 }
 
+#' Prediction method for \code{coxmtl} objects
+#'
+#' @param object An object of class \code{coxmtl}.
+#' @param newdata Optional new data for making predictions. If omitted,
+#'   predictions are made using the data used for fitting the model.
+#' @param newgroup Optional new group labels for making predictions. If omitted,
+#'   predictions use the groups from the original data, or the \code{group}
+#'   column in \code{newdata} when available.
+#' @param type The type of prediction to perform: \code{"lp"} for the linear
+#'   predictor or \code{"risk"} for \eqn{\exp(\text{lp})}.
+#' @param ... Additional arguments (unused).
+#' @return A numeric vector of predictions.
 #' @export
 predict.coxmtl <- function(
   object, newdata = NULL, newgroup = NULL,
@@ -496,6 +525,12 @@ predict.coxmtl <- function(
   lp
 }
 
+#' Predict the cumulative baseline hazard function for \code{coxmtl} objects
+#'
+#' @param object An object of class \code{coxmtl}.
+#' @param ... Additional arguments (unused).
+#' @return A \code{data.frame} with event time, cumulative baseline hazard, and
+#'   strata columns.
 #' @export
 basehaz.coxmtl <- function(object, ...) {
   res <- group_lp(object$x, object$group, object$coefficients)
@@ -518,6 +553,12 @@ basehaz.coxmtl <- function(object, ...) {
   do.call(rbind, out)
 }
 
+#' Variance-covariance matrix for a \code{coxmtl} object
+#'
+#' @param object An object of class \code{coxmtl}.
+#' @param ... Additional arguments (unused).
+#' @return A matrix representing the variance-covariance matrix of the free
+#'   parameters.
 #' @export
 vcov.coxmtl <- function(object, ...) {
   phi <- coef(object)
@@ -556,6 +597,15 @@ vcov.coxmtl <- function(object, ...) {
   vc
 }
 
+#' Summary method for a \code{coxmtl} object
+#'
+#' @param object An object of class \code{coxmtl}.
+#' @param conf.int A numeric value between 0 and 1 indicating the confidence
+#'   level of the confidence interval. Default is 0.95.
+#' @param ... Additional arguments (unused).
+#' @return An object of class \code{summary.coxmtl} with model size, event
+#'   count, log-likelihood, coefficient table, confidence intervals, and center
+#'   weights.
 #' @export
 summary.coxmtl <- function(object, conf.int = 0.95, ...) {
   beta_vec <- as.numeric(object$coefficients)
@@ -612,6 +662,15 @@ summary.coxmtl <- function(object, conf.int = 0.95, ...) {
   out
 }
 
+#' Print method for a \code{summary.coxmtl} object
+#'
+#' @param x A summary object produced from a fitted \code{coxmtl} model.
+#' @param digits An integer controlling the number of significant digits to
+#'   print for numeric values.
+#' @param signif.stars Logical; if \code{TRUE}, significance stars are printed
+#'   along with the p-values.
+#' @param ... Additional arguments (unused).
+#' @return Invisibly returns \code{x}.
 #' @export
 print.summary.coxmtl <- function(
   x, digits = max(getOption("digits") - 3, 3),
