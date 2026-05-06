@@ -1,6 +1,7 @@
 # A Review of Transfer Learning Approaches for Survival Analysis
 
 ``` r
+
 library(survtrans)
 ```
 
@@ -12,6 +13,7 @@ domain. In this vignette, we will review the transfer learning
 approaches for survival analysis.
 
 ``` r
+
 formula <- survival::Surv(time, status) ~ . - group - id
 df_target <- sim2[sim2$group == 1, ]
 ```
@@ -19,6 +21,7 @@ df_target <- sim2[sim2$group == 1, ]
 ## Target Learning
 
 ``` r
+
 fit_target <- ncvcox(formula, df_target, lambda = 0.2, penalty = "SCAD")
 basehaz_target <- basehaz(fit_target)
 summary(fit_target)
@@ -42,6 +45,7 @@ summary(fit_target)
 ## Global Learning
 
 ``` r
+
 fit_global <- ncvcox(formula, sim2, lambda = 0.1, penalty = "SCAD")
 basehaz_global <- basehaz(fit_global)
 summary(fit_global)
@@ -67,6 +71,7 @@ summary(fit_global)
 ### Stratified Learning
 
 ``` r
+
 fit_strat <- ncvcox(formula, sim2, sim2$group, lambda = 0.1, penalty = "SCAD")
 basehaz_strat <- basehaz(fit_strat)
 summary(fit_strat)

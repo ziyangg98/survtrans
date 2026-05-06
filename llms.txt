@@ -20,6 +20,7 @@ user-defined global centers.
 You can install the development version of **survtrans** with:
 
 ``` r
+
 # install.packages("pak")
 pak::pak("ziyangg98/survtrans")
 ```
@@ -30,6 +31,7 @@ Fit a transfer learning Cox model on simulated data with 5 groups (1
 target + 4 sources, 20 features, true support on X1–X4):
 
 ``` r
+
 library(survtrans)
 
 formula <- Surv(time, status) ~ . - group - id
@@ -77,6 +79,7 @@ global centers, and `lambda3` shrinks each group-specific coefficient
 toward those centers.
 
 ``` r
+
 w <- matrix(rep(1 / 5, 5), nrow = 1)
 colnames(w) <- levels(factor(sim2$group))
 
@@ -149,6 +152,7 @@ define a prior matrix to encode which sources are informative for the
 target:
 
 ``` r
+
 pm <- rbind(
   tissue_A = c(0.5, 0.5, 0, 0),
   tissue_B = c(0, 0, 0.5, 0.5)
@@ -199,6 +203,7 @@ It returns a `cv.coxtrans` object with CV diagnostics and the final
 refitted models at both rules.
 
 ``` r
+
 cv_fit <- cv.coxtrans(
   formula, sim2, sim2$group, target = 1, penalty = "SCAD", ncores = 8
 )
@@ -222,6 +227,7 @@ fixed at their optimal values) can be visualised with
 [`plot()`](https://rdrr.io/r/graphics/plot.default.html):
 
 ``` r
+
 plot(cv_fit)
 ```
 
@@ -234,6 +240,7 @@ or `predict(cv_fit, s = "lambda.1se", ...)` to extract from the sparser
 model.
 
 ``` r
+
 summary(cv_fit$coxtrans.fit)
 #> Call:
 #> coxtrans(formula = formula, data = data, group = group, target = target, 
@@ -265,6 +272,7 @@ summary(cv_fit$coxtrans.fit)
 ### Baseline hazard
 
 ``` r
+
 library(ggplot2)
 
 basehaz_pred <- basehaz(fit)
