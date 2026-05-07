@@ -82,7 +82,12 @@
   : Diagnose Cox Transfer Model's Optimization Process
 
 - [`refit()`](http://gongziyang.com/survtrans/reference/refit.md) :
-  Refit a coxtrans model with hard constraints
+  Refit a coxmtl model with hard constraints (oracle estimator)
+
+- [`print(`*`<refit.coxmtl>`*`)`](http://gongziyang.com/survtrans/reference/print.refit.coxmtl.md)
+  :
+
+  Print method for a `refit.coxmtl` object
 
 ## Prediction
 
@@ -162,9 +167,6 @@
 
 - [`diagnose()`](http://gongziyang.com/survtrans/reference/diagnose.md)
   : Generic function for diagnose
-
-- [`preprocess()`](http://gongziyang.com/survtrans/reference/preprocess.md)
-  : Preprocess Survival Data
 
 ## Data Sets
 

@@ -106,7 +106,7 @@
 <h3 id="data-flow">Data Flow<a class="anchor" aria-label="anchor" href="#data-flow"></a></h3>
 <ol style="list-style-type: decimal"><li>User calls <code>coxtrans(formula, data, group, ...)</code> where <code>group</code> identifies source/target domains</li>
 <li>
-<code><a href="reference/preprocess.html">preprocess()</a></code> in <code>R/utils.R</code> handles formula parsing, model matrix construction (<code>scale(x)</code>), and group splitting (sorted by time descending)</li>
+<code>preprocess()</code> in <code>R/utils.R</code> handles formula parsing, model matrix construction (<code>scale(x)</code>), and group splitting (sorted by time descending)</li>
 <li>ADMM iterations call C++ functions for likelihood/gradient/proximal steps</li>
 <li>Post-processing: coefficients are un-standardized via <code>sweep(coefficients, 1, x_scale, "/")</code>; stored <code>x</code> is centered but not scaled</li>
 </ol></div>

@@ -205,7 +205,8 @@ refitted models at both rules.
 ``` r
 
 cv_fit <- cv.coxtrans(
-  formula, sim2, sim2$group, target = 1, penalty = "SCAD", ncores = 8
+  formula, sim2, sim2$group,
+  target = 1, penalty = "SCAD", ncores = 8
 )
 cv_fit
 #> cv.coxtrans

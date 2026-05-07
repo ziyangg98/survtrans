@@ -1,4 +1,9 @@
-# Refit a coxtrans model with hard constraints
+# Refit a coxmtl model with hard constraints (oracle estimator)
+
+Extracts the active constraint structure from a penalized `coxmtl` fit,
+encodes it as hard constraints via the QR null-space basis, and fits an
+unpenalized stratified Cox model in the reparametrized space. Returns
+debiased MLE coefficients and valid standard errors for all groups.
 
 Extracts the constraint structure (active set, sharing pattern, prior
 constraints) from a penalized coxtrans fit, encodes them as hard
@@ -9,6 +14,9 @@ valid standard errors for target-group features.
 ## Usage
 
 ``` r
+# S3 method for class 'coxmtl'
+refit(object, ...)
+
 refit(object, ...)
 
 # S3 method for class 'coxtrans'
@@ -26,6 +34,40 @@ refit(object, ...)
   Additional arguments (unused).
 
 ## Value
+
+An object of class `refit.coxmtl` with components:
+
+- coefficients:
+
+  Matrix (p x K) of oracle refitted coefficients.
+
+- se:
+
+  Matrix (p x K) of standard errors (delta method).
+
+- phi_hat:
+
+  Named numeric vector of free-parameter (phi) estimates.
+
+- coxph_fit:
+
+  The underlying `coxph` object, or `NULL`.
+
+- n:
+
+  Total observations used.
+
+- nevent:
+
+  Number of events.
+
+- active_features:
+
+  Integer vector: features non-zero in any group.
+
+- basis:
+
+  The null-space basis \\B\\ from the penalized fit.
 
 An object of class `refit.coxtrans` with components:
 
@@ -52,6 +94,20 @@ An object of class `refit.coxtrans` with components:
   Integer vector of active feature indices.
 
 ## Details
+
+Oracle refit procedure:
+
+1.  Use the null-space basis \\B\\ stored in the penalized fit, which
+    encodes active sparsity, pairwise fusion, and center constraints.
+
+2.  Build reparametrized design \\Z =
+    \mathrm{bdiag}(X_1,\ldots,X_K)\\B\\.
+
+3.  Fit `coxph(Surv(time,status) ~ Z + strata(group))` — unpenalized
+    stratified Cox with all active constraints hard-coded in the design.
+
+4.  Map back via \\\hat\beta = B\hat\phi\\; compute standard errors via
+    the delta method.
 
 The refit procedure:
 

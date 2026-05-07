@@ -96,9 +96,9 @@ constraints were activated.
 
 1.  User calls `coxtrans(formula, data, group, ...)` where `group`
     identifies source/target domains
-2.  [`preprocess()`](http://gongziyang.com/survtrans/reference/preprocess.md)
-    in `R/utils.R` handles formula parsing, model matrix construction
-    (`scale(x)`), and group splitting (sorted by time descending)
+2.  `preprocess()` in `R/utils.R` handles formula parsing, model matrix
+    construction (`scale(x)`), and group splitting (sorted by time
+    descending)
 3.  ADMM iterations call C++ functions for likelihood/gradient/proximal
     steps
 4.  Post-processing: coefficients are un-standardized via

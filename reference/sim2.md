@@ -122,4 +122,4 @@ A data frame with 500 rows and 24 variables:
 
 ## Source
 
-[../articles/simulate-data.html](http://gongziyang.com/survtrans/articles/simulate-data.md)
+Simulated data generated for package vignettes and examples.

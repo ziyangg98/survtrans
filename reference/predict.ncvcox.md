@@ -6,7 +6,7 @@ Prediction method for `ncvcox` objects.
 
 ``` r
 # S3 method for class 'ncvcox'
-predict(object, newdata = NULL, newgroup = NULL, type = c("lp", "risk"), ...)
+predict(object, newdata, type = c("lp", "risk"), ...)
 ```
 
 ## Arguments
@@ -17,13 +17,7 @@ predict(object, newdata = NULL, newgroup = NULL, type = c("lp", "risk"), ...)
 
 - newdata:
 
-  Optional new data for making predictions. If omitted, predictions are
-  made using the data used for fitting the model.
-
-- newgroup:
-
-  Optional new group for making predictions. If omitted, predictions are
-  made using the groups from the original data.
+  New data for making predictions.
 
 - type:
 
