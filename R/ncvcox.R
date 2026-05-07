@@ -34,7 +34,7 @@ ncvcox <- function(
   ), init, control, ...
 ) {
   # Load the data
-  data <- preprocess(formula, data, group = group)
+  data <- cox_data(formula, data, group = group)
   x <- data$x
   x_scale <- attr(x, "scaled:scale")
   time <- data$time
@@ -44,20 +44,18 @@ ncvcox <- function(
   # Properties of the data
   n_samples <- nrow(x)
   n_features <- ncol(x)
-  n_groups <- length(unique(group))
   group_levels <- levels(group)
+  n_groups <- length(group_levels)
   group_idxs <- lapply(group_levels, function(g) which(group == g))
 
   # Check the penalty argument
   penalty <- match.arg(penalty, choices = c("lasso", "MCP", "SCAD"))
 
   # Check the init argument
-  if (!missing(init) && length(init) > 0) {
-    if (length(init) != n_features) {
-      stop("Wrong length for initial values")
-    }
-  } else {
+  if (missing(init) || !length(init)) {
     init <- numeric(n_features)
+  } else if (length(init) != n_features) {
+    stop("Wrong length for initial values")
   }
 
   # Check the control argument
@@ -89,15 +87,15 @@ ncvcox <- function(
       r[idx] <- wls$residuals
     }
     xw <- x * w
-    xwx <- colMeans(x2 * w)
+    xwx_diag <- colMeans(x2 * w)
 
     # Update beta by cyclic coordinate descent
     repeat {
       max_diff <- 0
       for (j in seq_len(n_features)) {
         beta_j <- beta[j]
-        u <- mean(xw[, j] * r) + xwx[j] * beta_j
-        v <- xwx[j]
+        u <- mean(xw[, j] * r) + xwx_diag[j] * beta_j
+        v <- xwx_diag[j]
         beta[j] <- close_update(u, v, penalty, lambda, gamma)
         shift <- beta[j] - beta_j
         if (shift != 0) {
@@ -111,7 +109,7 @@ ncvcox <- function(
     # Calculate the log-likelihood
     offset <- x %*% beta
     hazard <- exp(offset)
-    risk_set <- calc_risk_set(hazard, time, group_idxs)
+    risk_set <- cox_risk_set(hazard, time, group_idxs)
     loss <- sum(status * (offset - log(risk_set)))
     loss_penalty <- penalty_value(beta, penalty, lambda, gamma) * n_samples
     loss_total <- loss - loss_penalty
@@ -242,7 +240,7 @@ logLik.ncvcox <- function(object, ...) {
 
   offset <- x %*% coefficients
   hazard <- exp(offset)
-  risk_set <- calc_risk_set(hazard, time, group_idxs)
+  risk_set <- cox_risk_set(hazard, time, group_idxs)
   sum(status * (offset - log(risk_set)))
 }
 
@@ -312,13 +310,10 @@ summary.ncvcox <- function(object, conf.int = 0.95, compressed = TRUE, ...) {
     missing_names <- setdiff(variable_names, coef_names)
 
     if (length(missing_names) > 0) {
-      for (name in missing_names) {
-        coef_matrix_extract <- rbind(coef_matrix_extract, c(NA, NA, NA, NA, NA))
-        conf_int_matrix_extract <- rbind(
-          conf_int_matrix_extract, c(NA, NA, NA, NA)
-        )
-        coef_names <- c(coef_names, name)
-      }
+      n_miss <- length(missing_names)
+      coef_matrix_extract <- rbind(coef_matrix_extract, matrix(NA, n_miss, 5))
+      conf_int_matrix_extract <- rbind(conf_int_matrix_extract, matrix(NA, n_miss, 4))
+      coef_names <- c(coef_names, missing_names)
     }
     coef_order <- match(variable_names, coef_names)
     coef_matrix <- coef_matrix_extract[coef_order, ]
@@ -396,10 +391,7 @@ print.summary.ncvcox <- function(
 
 #' Prediction method for \code{ncvcox} objects.
 #' @param object An object of class \code{ncvcox}.
-#' @param newdata Optional new data for making predictions. If omitted,
-#'   predictions are made using the data used for fitting the model.
-#' @param newgroup Optional new group for making predictions. If omitted,
-#'   predictions are made using the groups from the original data.
+#' @param newdata New data for making predictions.
 #' @param type The type of prediction to perform. Options include:
 #'   \describe{
 #'     \item{\code{"lp"}}{The linear predictor.}
@@ -408,10 +400,7 @@ print.summary.ncvcox <- function(
 #' @param ... Additional arguments (unused).
 #' @return A numeric vector of predictions.
 #' @export
-predict.ncvcox <- function(
-  object, newdata = NULL, newgroup = NULL,
-  type = c("lp", "risk"), ...
-) {
+predict.ncvcox <- function(object, newdata, type = c("lp", "risk"), ...) {
   type <- match.arg(type)
   x <- stats::model.matrix(object$formula, newdata)[, -1]
   lp <- as.numeric(x %*% object$coefficients)
@@ -433,28 +422,25 @@ basehaz.ncvcox <- function(object, ...) {
   status <- object$status
   group <- object$group
   x <- object$x
-  n_groups <- length(unique(group))
   group_levels <- levels(group)
   group_idxs <- lapply(group_levels, function(g) which(group == g))
   offset <- x %*% object$coefficients
   hazard <- exp(offset)
-  risk_set <- calc_risk_set(hazard, time, group_idxs)
+  risk_set <- cox_risk_set(hazard, time, group_idxs)
 
-  basehaz_list <- vector("list", n_groups)
-  for (k in seq_len(n_groups)) {
+  basehaz_list <- lapply(seq_along(group_idxs), function(k) {
     idx <- group_idxs[[k]]
     time_rev <- rev(time[idx])
     status_rev <- rev(status[idx])
-    risk_set_rev <- rev(risk_set[idx])
-    basehaz <- cumsum(status_rev / risk_set_rev)
-    basehaz_list[[k]] <- data.frame(
-      time = time_rev[status_rev == 1],
-      basehaz = basehaz[status_rev == 1],
-      strata = group_levels[k]
+    bh <- cumsum(status_rev / rev(risk_set[idx]))
+    data.frame(
+      time    = time_rev[status_rev == 1],
+      basehaz = bh[status_rev == 1],
+      strata  = group_levels[k]
     )
-  }
+  })
   basehaz_df <- do.call(rbind, basehaz_list)
-  if (n_groups == 1) {
+  if (length(group_levels) == 1L) {
     basehaz_df$strata <- NULL
   }
   basehaz_df

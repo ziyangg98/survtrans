@@ -34,7 +34,7 @@ A data frame with 500 rows and 24 variables:
 }
 }
 \source{
-\url{../articles/simulate-data.html}
+Simulated data generated for package vignettes and examples.
 }
 \description{
 A dataset containing survival data for 5 groups, where part of the effects

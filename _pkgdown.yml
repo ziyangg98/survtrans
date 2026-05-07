@@ -25,6 +25,7 @@ reference:
   - BIC.coxmtl
   - diagnose.coxtrans
   - refit
+  - print.refit.coxmtl
 - title: "Prediction"
   contents:
   - basehaz.coxtrans
@@ -46,7 +47,6 @@ reference:
   - predict.ncvcox
   - basehaz.ncvcox
   - diagnose
-  - preprocess
 - title: "Data Sets"
   contents:
   - sim2

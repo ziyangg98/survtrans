@@ -82,10 +82,10 @@ coxtrans <- function(
     stop("Lambda parameters must be non-negative")
   }
 
-  design_info <- design_spec(formula, data)
+  design_info <- cox_design(formula, data)
 
   # Preprocess data
-  data <- preprocess(formula, data, group = group)
+  data <- cox_data(formula, data, group = group)
   x <- data$x
   x_scale <- attr(x, "scaled:scale")
   x_center <- attr(x, "scaled:center")
@@ -105,7 +105,7 @@ coxtrans <- function(
 
   n_groups <- length(group_levels)
   group_idxs <- lapply(group_levels, function(g) which(group == g))
-  n_samples_group <- sapply(group_idxs, length)
+  n_samples_group <- lengths(group_idxs)
   n_samples_total <- nrow(x)
   n_features <- ncol(x)
   n_parameters <- n_features * n_groups
@@ -120,67 +120,33 @@ coxtrans <- function(
   if (ncol(prior_matrix) != n_groups - 1) {
     stop("prior_matrix must have ", n_groups - 1, " columns (one per source)")
   }
-  if (length(lambda3) == 1) lambda3 <- rep(lambda3, n_priors)
+  if (length(lambda3) == 1L) lambda3 <- rep(lambda3, n_priors)
   if (length(lambda3) != n_priors) {
     stop("lambda3 must be length 1 or ", n_priors, " (one per prior)")
   }
 
-  # Construct constraint matrix C (contr_pen)
-  n_constraints_penalty <- n_features * (1 + (n_groups - 1) + n_priors)
-  contr_pen <- matrix(0, n_constraints_penalty, n_parameters)
-
-  # Sparse block (p rows): extract β₀
-  for (j in seq_len(n_features)) {
-    contr_pen[j, j] <- 1
-  }
-
-  # Local block (p(K-1) rows): β_k - β₀
-  offset_local <- n_features
-  for (k in 2:n_groups) {
-    for (j in seq_len(n_features)) {
-      row <- offset_local + (k - 2) * n_features + j
-      contr_pen[row, (k - 1) * n_features + j] <- 1 # β_k
-      contr_pen[row, j] <- -1 # -β₀
-    }
-  }
-
-  # Prior block (Gp rows): β₀ - Σ w_{g,i} β_{i+1}
-  offset_prior <- n_features + n_features * (n_groups - 1)
-  for (g in seq_len(n_priors)) {
-    for (j in seq_len(n_features)) {
-      row <- offset_prior + (g - 1) * n_features + j
-      contr_pen[row, j] <- 1 # β₀
-      for (i in seq_len(n_groups - 1)) {
-        contr_pen[row, i * n_features + j] <- -prior_matrix[g, i]
-      }
-    }
-  }
-
-  contr_cross <- crossprod(contr_pen)
-
-  sparse_idx <- seq_len(n_features)
-  local_idx <- n_features + seq_len(n_features * (n_groups - 1))
-  prior_idx <- lapply(seq_len(n_priors), function(g) {
-    offset_prior + (g - 1) * n_features + seq_len(n_features)
-  })
+  constraints <- coxtrans_build_constraints(n_features, n_groups, prior_matrix)
+  contr_pen <- constraints$contr_pen
+  contr_cross <- constraints$contr_cross
+  blocks <- coxtrans_build_penalty_blocks(
+    constraints$sparse_idx, constraints$local_idx, constraints$prior_idx,
+    lambda1, lambda2, lambda3
+  )
 
   # Per-group data (stacked by group order)
   x_by_group <- lapply(group_idxs, function(idx) x[idx, , drop = FALSE])
-  time_stacked <- unlist(lapply(group_idxs, function(idx) time[idx]))
-  status_stacked <- unlist(lapply(group_idxs, function(idx) status[idx]))
+  time_stacked <- time[unlist(group_idxs)]
+  status_stacked <- status[unlist(group_idxs)]
 
-  stacked_group_idxs <- vector("list", n_groups)
-  n_passes <- 0L
-  for (k in seq_len(n_groups)) {
-    nk <- length(group_idxs[[k]])
-    stacked_group_idxs[[k]] <- n_passes + seq_len(nk)
-    n_passes <- n_passes + nk
-  }
+  sizes <- lengths(group_idxs)
+  ends <- cumsum(sizes)
+  starts <- c(1L, head(ends, -1L) + 1L)
+  stacked_group_idxs <- Map(seq, starts, ends)
 
   # Initialize ADMM variables
   theta <- numeric(n_parameters)
-  eta <- numeric(n_constraints_penalty)
-  nu <- numeric(n_constraints_penalty)
+  eta <- numeric(nrow(contr_pen))
+  nu <- numeric(nrow(contr_pen))
 
   # Initialize the training process
   n_iterations <- 0
@@ -207,7 +173,7 @@ coxtrans <- function(
     n_iterations <- n_iterations + 1
 
     # Compute per-group offset from theta
-    offset <- calc_offset(
+    offset <- cox_theta_offset(
       theta, n_features, n_groups, x_by_group, stacked_group_idxs
     )
 
@@ -246,48 +212,32 @@ coxtrans <- function(
 
     # Update auxiliary variables
     eta_old <- eta
-    eta <- c_theta + nu / vartheta
-    eta[sparse_idx] <- threshold_prox(
-      eta[sparse_idx], vartheta, penalty, lambda1, gamma
+    eta <- coxtrans_apply_penalty_blocks(
+      c_theta + nu / vartheta, blocks, vartheta, penalty, gamma
     )
-    eta[local_idx] <- threshold_prox(
-      eta[local_idx], vartheta, penalty, lambda2, gamma
-    )
-    for (g in seq_len(n_priors)) {
-      eta[prior_idx[[g]]] <- threshold_prox(
-        eta[prior_idx[[g]]], vartheta, penalty, lambda3[g], gamma
-      )
-    }
     nu <- nu + vartheta * (c_theta - eta)
 
     # Primal and dual residuals
     r_norm <- sqrt(sum((c_theta - eta)^2))
     s_norm <- vartheta * sqrt(sum(crossprod(contr_pen, eta - eta_old)^2))
 
-    eps_pri <- sqrt(n_constraints_penalty) * control$abstol +
+    eps_pri <- sqrt(nrow(contr_pen)) * control$abstol +
       control$reltol * max(sqrt(sum(c_theta^2)), sqrt(sum(eta^2)))
     dual_vec <- crossprod(contr_pen, nu)
     eps_dual <- sqrt(n_parameters) * control$abstol +
       control$reltol * sqrt(sum(dual_vec^2))
 
     # Compute loss (recompute offset from updated theta)
-    offset <- calc_offset(
+    offset <- cox_theta_offset(
       theta, n_features, n_groups, x_by_group, stacked_group_idxs
     )
     hazard <- exp(offset)
-    risk_set <- calc_risk_set(hazard, time_stacked, stacked_group_idxs)
+    risk_set <- cox_risk_set(hazard, time_stacked, stacked_group_idxs)
     loss <- sum(status_stacked * (offset - log(risk_set)))
 
-    loss_penalty <- penalty_value(
-      c_theta[sparse_idx], penalty, lambda1, gamma
-    ) + penalty_value(
-      c_theta[local_idx], penalty, lambda2, gamma
-    )
-    for (g in seq_len(n_priors)) {
-      loss_penalty <- loss_penalty +
-        penalty_value(c_theta[prior_idx[[g]]], penalty, lambda3[g], gamma)
-    }
-    loss_penalty <- loss_penalty * n_samples_total
+    loss_penalty <- coxtrans_penalty_value(
+      c_theta, blocks, penalty, gamma
+    ) * n_samples_total
     loss_total <- loss - loss_penalty
 
     # Augmented Lagrangian (Lyapunov function for convergence monitoring)
@@ -340,12 +290,11 @@ coxtrans <- function(
 
   # Extract active constraint flags from eta (tolerance-based comparison)
   eps <- .Machine$double.eps^0.5
-  eta_sparse <- eta[sparse_idx]
-  eta_local <- matrix(eta[local_idx], nrow = n_features, ncol = n_groups - 1)
-  eta_prior <- matrix(NA, nrow = n_features, ncol = n_priors)
-  for (g in seq_len(n_priors)) {
-    eta_prior[, g] <- eta[prior_idx[[g]]]
-  }
+  eta_sparse <- eta[constraints$sparse_idx]
+  eta_local <- matrix(
+    eta[constraints$local_idx], nrow = n_features, ncol = n_groups - 1
+  )
+  eta_prior <- vapply(constraints$prior_idx, function(idx) eta[idx], numeric(n_features))
 
   active_local <- abs(eta_local) < eps # p x (K-1)
   active_prior <- abs(eta_prior) < eps # p x G
@@ -353,32 +302,32 @@ coxtrans <- function(
 
   # Post-processing: jointly resolve constraints per feature
   for (j in seq_len(n_features)) {
-    shared <- which(active_local[j, ]) # local-merged source indices
+    merged_srcs <- which(active_local[j, ]) # source indices fused to target
 
     if (active_sparse[j]) {
-      # Sparse: β₁ = 0, local-shared sources also 0
+      # Sparse: β₁ = 0; fused sources are also zero
       coefficients[j, 1] <- 0
-      if (length(shared) > 0) coefficients[j, shared + 1] <- 0
+      if (length(merged_srcs) > 0) coefficients[j, merged_srcs + 1] <- 0
       next
     }
 
     active_g <- which(active_prior[j, ])
     if (length(active_g) > 0) {
-      # Prior active: resolve jointly with local
+      # Prior active: reconstruct target from source weighted average
       g <- active_g[1]
-      w <- prior_matrix[g, ]
-      local_mask <- rep(FALSE, n_groups - 1)
-      local_mask[shared] <- TRUE
-      w_local <- sum(w[local_mask])
-      w_free <- sum(w[!local_mask])
+      prior_w <- prior_matrix[g, ]
+      is_merged <- rep(FALSE, n_groups - 1)
+      is_merged[merged_srcs] <- TRUE
+      w_local <- sum(prior_w[is_merged])
+      w_free <- sum(prior_w[!is_merged])
       if (w_free > 0) {
         # β₁ = Σ_{free sources} w_i β_{i+1} / (1 - w_local)
-        free_sources <- which(!local_mask)
+        free_srcs <- which(!is_merged)
         coefficients[j, 1] <- sum(
-          w[free_sources] * coefficients[j, free_sources + 1]
+          prior_w[free_srcs] * coefficients[j, free_srcs + 1]
         ) / (1 - w_local)
       } else {
-        # All sources local-merged: β₁ = mean(all groups)
+        # All sources fused to target: β₁ = mean(all groups)
         coefficients[j, 1] <- mean(coefficients[j, ])
       }
       # Prior-induced sparsity: reconstruction below ADMM primal tolerance
@@ -386,14 +335,14 @@ coxtrans <- function(
       if (abs(coefficients[j, 1]) < control$abstol) {
         coefficients[j, 1] <- 0
       }
-      # Sync local-merged sources to target
-      if (length(shared) > 0) {
-        coefficients[j, shared + 1] <- coefficients[j, 1]
+      # Sync fused sources to target
+      if (length(merged_srcs) > 0) {
+        coefficients[j, merged_srcs + 1] <- coefficients[j, 1]
       }
-    } else if (length(shared) > 0) {
-      # Only local, no prior: average shared groups
-      shared_groups <- c(1, shared + 1)
-      coefficients[j, shared_groups] <- mean(coefficients[j, shared_groups])
+    } else if (length(merged_srcs) > 0) {
+      # Local fusion only, no prior: average fused groups
+      fused_groups <- c(1, merged_srcs + 1)
+      coefficients[j, fused_groups] <- mean(coefficients[j, fused_groups])
     }
   }
 
@@ -438,129 +387,125 @@ coxtrans <- function(
   fit
 }
 
-#' Diagnose Cox Transfer Model's Optimization Process
-#'
-#' @param object An object of class \code{coxtrans}.
-#' @param ... Additional arguments (currently unused).
-#' @details This function produces two plots:
-#' - Residuals Convergence: Plots the evolution of primal and dual residuals
-#' along with their tolerance levels.
-#' - Loss Decomposition: Plots the negative log-likelihood, total loss, and
-#' penalty term.
-#' @return Invisibly returns \code{NULL}. Called for its side effect of
-#' producing diagnostic plots.
-#' @export
-diagnose.coxtrans <- function(object, ...) {
-  history <- as.list(as.data.frame(object$history))
-  iter_range <- range(history$Iteration)
-  colors <- c(
-    Augmented = "#1B9E77", Primal = "#D95F02", Dual = "#7570B3",
-    NLL = "#E7298A", Penalty = "#66A61E", Total = "#E6AB02"
-  )
-  old_par <- par(no.readonly = TRUE)
-  on.exit(par(old_par))
-  par(
-    mfrow = c(1, 2), mar = c(5, 4.5, 4, 4) + 0.1, mgp = c(2.5, 0.8, 0),
-    cex.axis = 0.9, cex.lab = 1.1, cex.main = 1.2
-  )
+coxtrans_build_constraints <- function(n_features, n_groups, prior_matrix) {
+  n_priors <- nrow(prior_matrix)
+  n_parameters <- n_features * n_groups
+  n_constraints <- n_features * (1L + (n_groups - 1L) + n_priors)
+  contr_pen <- matrix(0, n_constraints, n_parameters)
 
-  plot_residuals <- function() {
-    y_lim <- range(
-      0, history$Primal.Residual, history$Dual.Residual,
-      history$Primal.Epsilon, history$Dual.Epsilon
-    ) * 1.05
-    plot(NA,
-      xlim = iter_range, ylim = y_lim, xlab = "Iteration", ylab = "Residuals",
-      main = "Residuals Convergence"
-    )
-    grid(col = "gray90", lty = 2)
-    lines(
-      history$Iteration, history$Primal.Residual,
-      col = colors["Primal"], lwd = 2
-    )
-    lines(
-      history$Iteration, history$Dual.Residual,
-      col = colors["Dual"], lwd = 2
-    )
-    lines(
-      history$Iteration, history$Primal.Epsilon,
-      col = colors["Primal"], lty = 2, lwd = 1.5
-    )
-    lines(
-      history$Iteration, history$Dual.Epsilon,
-      col = colors["Dual"], lty = 2, lwd = 1.5
-    )
-    par(new = TRUE)
-    plot(
-      history$Iteration, history$Augmented.Parameter,
-      type = "l", col = colors["Augmented"], lwd = 2, axes = FALSE,
-      xlab = "", ylab = "",
-      ylim = range(history$Augmented.Parameter) + c(-0.05, 0.05)
-    )
-    axis(4, col.axis = colors["Augmented"], col = colors["Augmented"])
-    mtext("Augmented Parameter",
-      side = 4, line = 2.5, col = colors["Augmented"], cex = 0.9
-    )
-    legend(
-      "top",
-      legend = c("Primal", "Dual", "Residual", "Tolerance", expression(rho)),
-      col = c(
-        colors["Primal"], colors["Dual"], "black", "black",
-        colors["Augmented"]
-      ),
-      lty = c(1, 1, 1, 2, 1),
-      lwd = c(2, 2, 1.5, 1.5, 2),
-      horiz = FALSE,
-      ncol = 3,
-      xpd = NA,
-      inset = c(0, 0.01),
-      cex = 0.75
-    )
+  sparse_idx <- seq_len(n_features)
+  for (j in seq_len(n_features)) {
+    contr_pen[j, j] <- 1
   }
 
-  plot_objective <- function() {
-    y_lim_obj <- range(
-      -history$Log.Likelihood, -history$Total.Loss
-    ) + c(-0.05, 0.05)
-    plot(NA,
-      xlim = iter_range, ylim = y_lim_obj, xlab = "Iteration", ylab = "Loss",
-      main = "Loss Decomposition"
-    )
-    grid(col = "gray90", lty = 2)
-    lines(
-      history$Iteration, -history$Log.Likelihood,
-      col = colors["NLL"], lwd = 2
-    )
-    lines(
-      history$Iteration, -history$Total.Loss,
-      col = colors["Total"], lwd = 2
-    )
-    par(new = TRUE)
-    plot(
-      history$Iteration, history$Penalty.Term,
-      type = "l", col = colors["Penalty"], lwd = 2, axes = FALSE,
-      xlab = "", ylab = "", ylim = range(history$Penalty.Term) + c(-0.05, 0.05)
-    )
-    axis(4, col.axis = colors["Penalty"], col = colors["Penalty"])
-    mtext("Penalty Term",
-      side = 4, line = 2.5, col = colors["Penalty"], cex = 0.9
-    )
-    legend(
-      "top",
-      legend = c("Total", "NLL", "Penalty"),
-      col = colors[c("Total", "NLL", "Penalty")],
-      lty = 1,
-      lwd = 2,
-      horiz = FALSE,
-      ncol = 3,
-      xpd = NA,
-      inset = c(0, 0.01),
-      cex = 0.75
-    )
+  local_start <- n_features
+  local_idx <- local_start + seq_len(n_features * (n_groups - 1L))
+  if (n_groups > 1L) {
+    for (k in seq.int(2L, n_groups)) {
+      for (j in seq_len(n_features)) {
+        row <- local_start + (k - 2L) * n_features + j
+        contr_pen[row, (k - 1L) * n_features + j] <- 1
+        contr_pen[row, j] <- -1
+      }
+    }
   }
 
-  plot_residuals()
-  plot_objective()
+  prior_start <- n_features + n_features * (n_groups - 1L)
+  prior_idx <- lapply(seq_len(n_priors), function(g) {
+    prior_start + (g - 1L) * n_features + seq_len(n_features)
+  })
+  for (g in seq_len(n_priors)) {
+    for (j in seq_len(n_features)) {
+      row <- prior_start + (g - 1L) * n_features + j
+      contr_pen[row, j] <- 1
+      for (i in seq_len(n_groups - 1L)) {
+        contr_pen[row, i * n_features + j] <- -prior_matrix[g, i]
+      }
+    }
+  }
+
+  list(
+    contr_pen = contr_pen,
+    contr_cross = crossprod(contr_pen),
+    sparse_idx = sparse_idx,
+    local_idx = local_idx,
+    prior_idx = prior_idx
+  )
+}
+
+coxtrans_build_penalty_blocks <- function(sparse_idx, local_idx, prior_idx,
+                                          lambda1, lambda2, lambda3) {
+  c(
+    list(list(idx = sparse_idx, lambda = lambda1)),
+    if (length(local_idx) > 0L) list(list(idx = local_idx, lambda = lambda2)),
+    lapply(seq_along(prior_idx), function(g) {
+      list(idx = prior_idx[[g]], lambda = lambda3[g])
+    })
+  )
+}
+
+coxtrans_apply_penalty_blocks <- function(
+  values, blocks, vartheta, penalty, gamma
+) {
+  for (block in blocks) {
+    values[block$idx] <- threshold_prox(
+      values[block$idx], vartheta, penalty, block$lambda, gamma
+    )
+  }
+  values
+}
+
+coxtrans_penalty_value <- function(values, blocks, penalty, gamma) {
+  sum(vapply(blocks, function(block) {
+    penalty_value(values[block$idx], penalty, block$lambda, gamma)
+  }, numeric(1)))
+}
+
+#' @importFrom utils head
+coxtrans_coefficient_map <- function(coefficients, active_prior = NULL,
+                                     prior_matrix = NULL) {
+  stopifnot(is.matrix(coefficients), ncol(coefficients) >= 1)
+  n_groups <- ncol(coefficients)
+  n_features <- nrow(coefficients)
+  has_prior <- !is.null(active_prior) && !is.null(prior_matrix)
+
+  target_constrained <- if (has_prior) {
+    apply(active_prior, 1, any)
+  } else {
+    rep(FALSE, n_features)
+  }
+
+  phi_list <- lapply(seq_len(n_features), function(j) {
+    if (target_constrained[j]) {
+      unique(coefficients[j, -1])
+    } else {
+      unique(coefficients[j, ])
+    }
+  })
+
+  n_unique <- lengths(phi_list)
+  offsets <- c(0L, head(cumsum(n_unique), -1L))
+  link <- matrix(0, n_groups * n_features, sum(n_unique))
+
+  for (j in seq_len(n_features)) {
+    phi_j <- phi_list[[j]]
+    off_j <- offsets[j]
+
+    for (k in if (target_constrained[j]) 2:n_groups else seq_len(n_groups)) {
+      row <- (k - 1L) * n_features + j
+      link[row, off_j + which.min(abs(coefficients[j, k] - phi_j))] <- 1
+    }
+
+    if (target_constrained[j]) {
+      g_active <- which(active_prior[j, ])[1]
+      w <- prior_matrix[g_active, ]
+      for (i in seq_len(n_groups - 1)) {
+        pos <- which.min(abs(coefficients[j, i + 1] - phi_j))
+        link[j, off_j + pos] <- link[j, off_j + pos] + w[i]
+      }
+    }
+  }
+  link
 }
 
 #' Print method for a \code{coxtrans} object
@@ -603,6 +548,94 @@ coef.coxtrans <- function(object, ...) {
   psi
 }
 
+#' Log-likelihood for a \code{coxtrans} object
+#'
+#' @param object An object of class \code{coxtrans}.
+#' @param ... Additional arguments (unused).
+#' @return A numeric value representing the log-likelihood of the fitted
+#' \code{coxtrans} object.
+#' @export
+logLik.coxtrans <- function(object, ...) {
+  group_levels <- colnames(object$coefficients)
+  group_idxs <- lapply(group_levels, function(g) which(object$group == g))
+  lp <- cox_linear_predictor(object$x, object$group, object$coefficients)
+  risk_set <- cox_risk_set(exp(lp), object$time, group_idxs)
+  sum(object$status * (lp - log(risk_set)))
+}
+
+#' Prediction method for \code{coxtrans} objects.
+#' @param object An object of class \code{coxtrans}.
+#' @param newdata Optional new data for making predictions. If omitted,
+#'   predictions are made using the data used for fitting the model.
+#' @param newgroup Optional new group for making predictions. If omitted,
+#'   predictions are made using the groups from the original data.
+#' @param type The type of prediction to perform. Options include:
+#'   \describe{
+#'     \item{\code{"lp"}}{The linear predictor.}
+#'     \item{\code{"risk"}}{The risk score \eqn{\exp(\text{lp})}.}
+#'   }
+#' @param ... Additional arguments (unused).
+#' @return A numeric vector of predictions.
+#' @export
+predict.coxtrans <- function(
+  object, newdata = NULL, newgroup = NULL,
+  type = c("lp", "risk"), ...
+) {
+  type <- match.arg(type)
+
+  if (is.null(newdata)) {
+    x <- object$x
+    group <- object$group
+  } else {
+    x <- cox_model_matrix(
+      object$design_info,
+      newdata,
+      rownames(object$coefficients)
+    )
+    if (is.null(newgroup)) {
+      if ("group" %in% names(newdata)) {
+        newgroup <- newdata$group
+      } else {
+        stop("newgroup must be supplied when newdata has no group column")
+      }
+    }
+    group <- cox_prediction_group(newgroup, levels(object$group))
+  }
+
+  lp <- cox_linear_predictor(x, group, object$coefficients)
+  if (type == "risk") lp <- exp(lp)
+  lp
+}
+
+#' Predict the cumulative baseline hazard function for \code{coxtrans} objects
+#'
+#' @param object An object of class \code{coxtrans}.
+#' @param ... Additional arguments (unused).
+#'
+#' @return A \code{data.frame} with one row for each time point, and columns
+#' containing the event time, the cumulative baseline hazard function, and the
+#' strata.
+#' @export
+basehaz.coxtrans <- function(object, ...) {
+  group_levels <- colnames(object$coefficients)
+  group_idxs <- lapply(group_levels, function(g) which(object$group == g))
+  lp <- cox_linear_predictor(object$x, object$group, object$coefficients)
+  risk_set <- cox_risk_set(exp(lp), object$time, group_idxs)
+
+  basehaz_list <- lapply(seq_along(group_idxs), function(k) {
+    idx <- group_idxs[[k]]
+    time_rev <- rev(object$time[idx])
+    status_rev <- rev(object$status[idx])
+    bh <- cumsum(status_rev / rev(risk_set[idx]))
+    data.frame(
+      time    = time_rev[status_rev == 1],
+      basehaz = bh[status_rev == 1],
+      strata  = group_levels[k]
+    )
+  })
+  do.call(rbind, basehaz_list)
+}
+
 #' Variance-covariance matrix for a \code{coxtrans} object.
 #' @param object An object of class \code{coxtrans}.
 #' @param ... Additional arguments (unused).
@@ -622,11 +655,12 @@ vcov.coxtrans <- function(object, ...) {
   group_idxs <- lapply(coef_groups, function(g) which(group == g))
 
   psi <- coef(object)
-  link_matrix <- build_link_matrix(
-    coefficients, object$active_local, object$active_prior, object$prior_matrix
+  link_matrix <- coxtrans_coefficient_map(
+    coefficients, object$active_prior, object$prior_matrix
   )
 
-  z <- block_diag(lapply(group_idxs, function(idx) x[idx, ])) %*% link_matrix
+  z <- dense_block_diag(lapply(group_idxs, function(idx) x[idx, ])) %*%
+    link_matrix
   time <- unlist(lapply(group_idxs, function(idx) time[idx]))
   status <- unlist(lapply(group_idxs, function(idx) status[idx]))
 
@@ -636,39 +670,27 @@ vcov.coxtrans <- function(object, ...) {
   psi1 <- psi[is_nonzero]
   lp <- z1 %*% psi1
 
+  sizes_v <- lengths(group_idxs)
+  ends_v <- cumsum(sizes_v)
+  starts_v <- c(1L, head(ends_v, -1L) + 1L)
+  stacked_idxs <- Map(seq, starts_v, ends_v)
+
   gradients <- matrix(0, nrow = n_samples, ncol = n_nonzero)
   hessians <- matrix(0, nrow = n_samples, ncol = n_nonzero^2)
-  n_passes <- 0
   for (k in seq_len(n_groups)) {
-    idx <- n_passes + seq_along(group_idxs[[k]])
-    n_passes <- n_passes + length(idx)
+    idx <- stacked_idxs[[k]]
     ghs <- calc_grad_hess(lp[idx], z1[idx, ], time[idx], status[idx])
     gradients[idx, ] <- ghs$grad
     hessians[idx, ] <- ghs$hess
   }
   hess <- matrix(colSums(hessians), n_nonzero, n_nonzero)
-  hess_inv <- solve(hess)
+  hess_inv <- safe_solve(hess)
   grad_cov <- crossprod(gradients)
   vcov <- hess_inv %*% grad_cov %*% hess_inv
   dimnames(vcov) <- list(
     names(psi1), names(psi1)
   )
   vcov
-}
-
-
-#' Log-likelihood for a \code{coxtrans} object
-#'
-#' @param object An object of class \code{coxtrans}.
-#' @param ... Additional arguments (unused).
-#' @return A numeric value representing the log-likelihood of the fitted
-#' \code{coxtrans} object.
-#' @export
-logLik.coxtrans <- function(object, ...) {
-  res <- group_lp(object$x, object$group, object$coefficients)
-  hazard <- exp(res$lp)
-  risk_set <- calc_risk_set(hazard, object$time, res$group_idxs)
-  sum(object$status * (res$lp - log(risk_set)))
 }
 
 #' Summary method for a \code{coxtrans} object
@@ -709,9 +731,8 @@ summary.coxtrans <- function(object, conf.int = 0.95, target_only = TRUE, ...) {
   coefficients <- coefficients[is_nonzero]
   if (target_only) {
     n_features <- nrow(object$coefficients)
-    link_matrix <- as.matrix(build_link_matrix(
-      object$coefficients, object$active_local,
-      object$active_prior, object$prior_matrix
+    link_matrix <- as.matrix(coxtrans_coefficient_map(
+      object$coefficients, object$active_prior, object$prior_matrix
     )[
       seq_len(n_features), is_nonzero,
       drop = FALSE
@@ -867,43 +888,43 @@ print.summary.coxtrans <- function(
     entries <- list()
     if (length(prior_f) > 0) {
       prior_groups <- split(prior_f, fpl[prior_f])
-      for (pg in names(prior_groups)) {
+      entries <- c(entries, lapply(names(prior_groups), function(pg) {
         label <- if (nchar(pg) > 0 && pg != "1") {
           paste0("Prior [", pg, "]")
         } else {
           "Prior transfer"
         }
-        entries[[length(entries) + 1]] <- list(
-          label = label,
-          value = paste(prior_groups[[pg]], collapse = ", ")
-        )
-      }
+        list(label = label, value = paste(prior_groups[[pg]], collapse = ", "))
+      }))
     }
     if (length(global_f) > 0) {
-      entries[[length(entries) + 1]] <- list(
+      entries <- c(entries, list(list(
         label = "Shared (local)",
         value = paste(global_f, collapse = ", ")
-      )
+      )))
     }
     if (length(partial_f) > 0) {
-      entries[[length(entries) + 1]] <- list(
+      entries <- c(entries, list(list(
         label = "Partial shared",
         value = paste(partial_f, collapse = ", ")
-      )
+      )))
     }
     if (length(local_f) > 0) {
-      entries[[length(entries) + 1]] <- list(
+      entries <- c(entries, list(list(
         label = "Group-specific",
         value = paste(local_f, collapse = ", ")
-      )
+      )))
     }
     if (length(zero_f) > 0) {
-      preview <- paste(zero_f[seq_len(min(3, length(zero_f)))], collapse = ", ")
-      if (length(zero_f) > 3) preview <- paste0(preview, ", ...")
-      entries[[length(entries) + 1]] <- list(
+      preview <- paste(
+        zero_f[seq_len(min(3L, length(zero_f)))],
+        collapse = ", "
+      )
+      if (length(zero_f) > 3L) preview <- paste0(preview, ", ...")
+      entries <- c(entries, list(list(
         label = "Sparse (zero)",
         value = paste0(length(zero_f), " features (", preview, ")")
-      )
+      )))
     }
 
     if (length(entries) > 0) {
@@ -918,81 +939,6 @@ print.summary.coxtrans <- function(
   }
 
   invisible(x)
-}
-
-#' Prediction method for \code{coxtrans} objects.
-#' @param object An object of class \code{coxtrans}.
-#' @param newdata Optional new data for making predictions. If omitted,
-#'   predictions are made using the data used for fitting the model.
-#' @param newgroup Optional new group for making predictions. If omitted,
-#'   predictions are made using the groups from the original data.
-#' @param type The type of prediction to perform. Options include:
-#'   \describe{
-#'     \item{\code{"lp"}}{The linear predictor.}
-#'     \item{\code{"risk"}}{The risk score \eqn{\exp(\text{lp})}.}
-#'   }
-#' @param ... Additional arguments (unused).
-#' @return A numeric vector of predictions.
-#' @export
-predict.coxtrans <- function(
-  object, newdata = NULL, newgroup = NULL,
-  type = c("lp", "risk"), ...
-) {
-  type <- match.arg(type)
-
-  if (is.null(newdata)) {
-    x <- object$x
-    group <- object$group
-  } else {
-    x <- predict_matrix(
-      object$design_info,
-      newdata,
-      rownames(object$coefficients)
-    )
-    if (is.null(newgroup)) {
-      if ("group" %in% names(newdata)) {
-        newgroup <- newdata$group
-      } else {
-        stop("newgroup must be supplied when newdata has no group column")
-      }
-    }
-    group <- check_newgroup(newgroup, levels(object$group))
-  }
-
-  lp <- score_by_group(x, group, object$coefficients)
-  if (type == "risk") lp <- exp(lp)
-  lp
-}
-
-#' Predict the cumulative baseline hazard function for \code{coxtrans} objects
-#'
-#' @param object An object of class \code{coxtrans}.
-#' @param ... Additional arguments (unused).
-#'
-#' @return A \code{data.frame} with one row for each time point, and columns
-#' containing the event time, the cumulative baseline hazard function, and the
-#' strata.
-#' @export
-basehaz.coxtrans <- function(object, ...) {
-  res <- group_lp(object$x, object$group, object$coefficients)
-  n_groups <- length(res$group_idxs)
-  hazard <- exp(res$lp)
-  risk_set <- calc_risk_set(hazard, object$time, res$group_idxs)
-
-  basehaz_list <- vector("list", n_groups)
-  for (k in seq_len(n_groups)) {
-    idx <- res$group_idxs[[k]]
-    time_rev <- rev(object$time[idx])
-    status_rev <- rev(object$status[idx])
-    risk_set_rev <- rev(risk_set[idx])
-    bh <- cumsum(status_rev / risk_set_rev)
-    basehaz_list[[k]] <- data.frame(
-      time = time_rev[status_rev == 1],
-      basehaz = bh[status_rev == 1],
-      strata = res$group_levels[k]
-    )
-  }
-  do.call(rbind, basehaz_list)
 }
 
 #' Refit a coxtrans model with hard constraints
@@ -1082,9 +1028,8 @@ refit.coxtrans <- function(object, ...) {
   }
 
   # 1. Link matrix encoding constraint structure
-  link <- build_link_matrix(
-    object$coefficients, object$active_local,
-    object$active_prior, object$prior_matrix
+  link <- coxtrans_coefficient_map(
+    object$coefficients, object$active_prior, object$prior_matrix
   )
   psi <- coef(object)
   is_nonzero <- psi != 0
@@ -1097,7 +1042,7 @@ refit.coxtrans <- function(object, ...) {
   group_levels <- colnames(object$coefficients)
   group_idxs <- lapply(group_levels, function(g) which(object$group == g))
 
-  z_mat <- (block_diag(
+  z_mat <- (dense_block_diag(
     lapply(group_idxs, function(idx) object$x[idx, , drop = FALSE])
   ) %*% link)[, is_nonzero, drop = FALSE]
   colnames(z_mat) <- paste0("psi", seq_len(n_free))
@@ -1202,4 +1147,129 @@ print.refit.coxtrans <- function(x, digits = max(getOption("digits") - 3, 3),
   }
 
   invisible(x)
+}
+
+#' Diagnose Cox Transfer Model's Optimization Process
+#'
+#' @param object An object of class \code{coxtrans}.
+#' @param ... Additional arguments (currently unused).
+#' @details This function produces two plots:
+#' - Residuals Convergence: Plots the evolution of primal and dual residuals
+#' along with their tolerance levels.
+#' - Loss Decomposition: Plots the negative log-likelihood, total loss, and
+#' penalty term.
+#' @return Invisibly returns \code{NULL}. Called for its side effect of
+#' producing diagnostic plots.
+#' @export
+diagnose.coxtrans <- function(object, ...) {
+  history <- as.list(as.data.frame(object$history))
+  iter_range <- range(history$Iteration)
+  colors <- c(
+    Augmented = "#1B9E77", Primal = "#D95F02", Dual = "#7570B3",
+    NLL = "#E7298A", Penalty = "#66A61E", Total = "#E6AB02"
+  )
+  old_par <- par(no.readonly = TRUE)
+  on.exit(par(old_par))
+  par(
+    mfrow = c(1, 2), mar = c(5, 4.5, 4, 4) + 0.1, mgp = c(2.5, 0.8, 0),
+    cex.axis = 0.9, cex.lab = 1.1, cex.main = 1.2
+  )
+
+  plot_residuals <- function() {
+    y_lim <- range(
+      0, history$Primal.Residual, history$Dual.Residual,
+      history$Primal.Epsilon, history$Dual.Epsilon
+    ) * 1.05
+    plot(NA,
+      xlim = iter_range, ylim = y_lim, xlab = "Iteration", ylab = "Residuals",
+      main = "Residuals Convergence"
+    )
+    grid(col = "gray90", lty = 2)
+    lines(
+      history$Iteration, history$Primal.Residual,
+      col = colors["Primal"], lwd = 2
+    )
+    lines(
+      history$Iteration, history$Dual.Residual,
+      col = colors["Dual"], lwd = 2
+    )
+    lines(
+      history$Iteration, history$Primal.Epsilon,
+      col = colors["Primal"], lty = 2, lwd = 1.5
+    )
+    lines(
+      history$Iteration, history$Dual.Epsilon,
+      col = colors["Dual"], lty = 2, lwd = 1.5
+    )
+    par(new = TRUE)
+    plot(
+      history$Iteration, history$Augmented.Parameter,
+      type = "l", col = colors["Augmented"], lwd = 2, axes = FALSE,
+      xlab = "", ylab = "",
+      ylim = range(history$Augmented.Parameter) + c(-0.05, 0.05)
+    )
+    axis(4, col.axis = colors["Augmented"], col = colors["Augmented"])
+    mtext("Augmented Parameter",
+      side = 4, line = 2.5, col = colors["Augmented"], cex = 0.9
+    )
+    legend(
+      "top",
+      legend = c("Primal", "Dual", "Residual", "Tolerance", expression(rho)),
+      col = c(
+        colors["Primal"], colors["Dual"], "black", "black",
+        colors["Augmented"]
+      ),
+      lty = c(1, 1, 1, 2, 1),
+      lwd = c(2, 2, 1.5, 1.5, 2),
+      horiz = FALSE,
+      ncol = 3,
+      xpd = NA,
+      inset = c(0, 0.01),
+      cex = 0.75
+    )
+  }
+
+  plot_objective <- function() {
+    y_lim_obj <- range(
+      -history$Log.Likelihood, -history$Total.Loss
+    ) + c(-0.05, 0.05)
+    plot(NA,
+      xlim = iter_range, ylim = y_lim_obj, xlab = "Iteration", ylab = "Loss",
+      main = "Loss Decomposition"
+    )
+    grid(col = "gray90", lty = 2)
+    lines(
+      history$Iteration, -history$Log.Likelihood,
+      col = colors["NLL"], lwd = 2
+    )
+    lines(
+      history$Iteration, -history$Total.Loss,
+      col = colors["Total"], lwd = 2
+    )
+    par(new = TRUE)
+    plot(
+      history$Iteration, history$Penalty.Term,
+      type = "l", col = colors["Penalty"], lwd = 2, axes = FALSE,
+      xlab = "", ylab = "", ylim = range(history$Penalty.Term) + c(-0.05, 0.05)
+    )
+    axis(4, col.axis = colors["Penalty"], col = colors["Penalty"])
+    mtext("Penalty Term",
+      side = 4, line = 2.5, col = colors["Penalty"], cex = 0.9
+    )
+    legend(
+      "top",
+      legend = c("Total", "NLL", "Penalty"),
+      col = colors[c("Total", "NLL", "Penalty")],
+      lty = 1,
+      lwd = 2,
+      horiz = FALSE,
+      ncol = 3,
+      xpd = NA,
+      inset = c(0, 0.01),
+      cex = 0.75
+    )
+  }
+
+  plot_residuals()
+  plot_objective()
 }

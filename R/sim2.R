@@ -59,5 +59,5 @@
 #' \item{X19}{Covariate 19}
 #' \item{X20}{Covariate 20}
 #' }
-#' @source \url{../articles/simulate-data.html}
+#' @source Simulated data generated for package vignettes and examples.
 NULL

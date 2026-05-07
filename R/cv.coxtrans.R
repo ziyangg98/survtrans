@@ -59,16 +59,16 @@ cv.coxtrans <- function(
   }
 
   l3_cols <- paste0("lambda3_", seq_len(n_priors))
+  bounds <- coxtrans_penalty_bounds(
+    formula, data, group, target, prior_matrix
+  )
   grid <- do.call(expand.grid, c(
     list(
-      lambda1 = lpath(calc_lambda1_max(formula, data, group, target)),
-      lambda2 = lpath(calc_lambda2_max(formula, data, group, target))
+      lambda1 = lpath(bounds$lambda1),
+      lambda2 = lpath(bounds$lambda2)
     ),
     stats::setNames(
-      lapply(
-        calc_lambda3_max(formula, data, group, target, prior_matrix),
-        lpath
-      ),
+      lapply(bounds$lambda3, lpath),
       l3_cols
     )
   ))
@@ -102,22 +102,26 @@ cv.coxtrans <- function(
         ),
         error = function(e) NULL
       )
-      if (is.null(fit)) return(list(dev = NA_real_, nzero = NA_real_))
+      if (is.null(fit)) {
+        return(list(dev = NA_real_, nzero = NA_real_))
+      }
       yt <- stats::model.response(stats::model.frame(formula, data[ti, ]))
       lp <- predict(fit, newdata = data[ti, ], newgroup = group[ti])
       n_events <- sum(yt[, 2])
-      if (n_events == 0L) return(list(dev = NA_real_, nzero = NA_real_))
-      o        <- order(yt[, 1], decreasing = TRUE)
-      lp_o     <- lp[o]
-      max_lp   <- max(lp_o)
-      cs       <- cumsum(exp(lp_o - max_lp))
+      if (n_events == 0L) {
+        return(list(dev = NA_real_, nzero = NA_real_))
+      }
+      o <- order(yt[, 1], decreasing = TRUE)
+      lp_o <- lp[o]
+      max_lp <- max(lp_o)
+      cs <- cumsum(exp(lp_o - max_lp))
       log_risk <- max_lp + log(ave(cs, yt[o, 1], FUN = max))
-      dev   <- -2 * sum(yt[o, 2] * (lp_o - log_risk)) / n_events
+      dev <- -2 * sum(yt[o, 2] * (lp_o - log_risk)) / n_events
       nzero <- sum(abs(fit$coefficients[, 1]) > 0)
       list(dev = dev, nzero = as.numeric(nzero))
     })
     list(
-      devs  = vapply(fold_results, `[[`, numeric(1), "dev"),
+      devs = vapply(fold_results, `[[`, numeric(1), "dev"),
       nzero = mean(
         vapply(fold_results, `[[`, numeric(1), "nzero"),
         na.rm = TRUE
@@ -147,11 +151,12 @@ cv.coxtrans <- function(
   }
 
   i_best <- which.min(cvm)
-  lambda_min <- list(
-    lambda1 = grid$lambda1[i_best],
-    lambda2 = grid$lambda2[i_best],
-    lambda3 = unlist(grid[i_best, l3_cols, drop = TRUE])
+  lambda_at <- function(i) list(
+    lambda1 = grid$lambda1[i],
+    lambda2 = grid$lambda2[i],
+    lambda3 = unlist(grid[i, l3_cols, drop = TRUE])
   )
+  lambda_min <- lambda_at(i_best)
 
   # 1SE rule: most sparse model within 1 SE of minimum deviance
   # Only select if strictly sparser than lambda.min; otherwise degenerate
@@ -159,16 +164,8 @@ cv.coxtrans <- function(
   candidates_1se <- which(
     is.finite(cvm) & cvm <= threshold_1se & nzero < nzero[i_best]
   )
-  if (length(candidates_1se) == 0L) {
-    i_1se <- i_best
-  } else {
-    i_1se <- candidates_1se[which.min(nzero[candidates_1se])]
-  }
-  lambda_1se <- list(
-    lambda1 = grid$lambda1[i_1se],
-    lambda2 = grid$lambda2[i_1se],
-    lambda3 = unlist(grid[i_1se, l3_cols, drop = TRUE])
-  )
+  i_1se <- if (length(candidates_1se) == 0L) i_best else candidates_1se[which.min(nzero[candidates_1se])]
+  lambda_1se <- lambda_at(i_1se)
 
   if (verbose) {
     cat(sprintf(
@@ -185,38 +182,31 @@ cv.coxtrans <- function(
     ))
   }
 
-  final_fit <- coxtrans(formula, data, group, target,
-    lambda1 = lambda_min$lambda1,
-    lambda2 = lambda_min$lambda2,
-    lambda3 = lambda_min$lambda3,
-    prior_matrix = prior_matrix, penalty = penalty,
-    control = control, ...
-  )
-
-  final_fit_1se <- coxtrans(formula, data, group, target,
-    lambda1 = lambda_1se$lambda1,
-    lambda2 = lambda_1se$lambda2,
-    lambda3 = lambda_1se$lambda3,
-    prior_matrix = prior_matrix, penalty = penalty,
-    control = control, ...
-  )
+  make_fit <- function(lam) {
+    coxtrans(formula, data, group, target,
+      lambda1 = lam$lambda1, lambda2 = lam$lambda2, lambda3 = lam$lambda3,
+      prior_matrix = prior_matrix, penalty = penalty, control = control, ...
+    )
+  }
+  final_fit     <- make_fit(lambda_min)
+  final_fit_1se <- make_fit(lambda_1se)
 
   structure(list(
-    grid           = grid,
-    cvm            = cvm,
-    cvsd           = cvsd,
-    cvup           = cvm + cvsd,
-    cvlo           = cvm - cvsd,
-    nzero          = nzero,
-    lambda.min     = lambda_min,
-    lambda.1se     = lambda_1se,
-    index.min      = i_best,
-    index.1se      = i_1se,
-    index          = i_best, # backward compat
-    coxtrans.fit     = final_fit,
+    grid = grid,
+    cvm = cvm,
+    cvsd = cvsd,
+    cvup = cvm + cvsd,
+    cvlo = cvm - cvsd,
+    nzero = nzero,
+    lambda.min = lambda_min,
+    lambda.1se = lambda_1se,
+    index.min = i_best,
+    index.1se = i_1se,
+    index = i_best, # backward compat
+    coxtrans.fit = final_fit,
     coxtrans.fit.1se = final_fit_1se,
-    call           = this_call,
-    name           = c("Partial Likelihood Deviance" = "deviance")
+    call = this_call,
+    name = c("Partial Likelihood Deviance" = "deviance")
   ), class = "cv.coxtrans")
 }
 
@@ -284,23 +274,25 @@ plot.cv.coxtrans <- function(x, ...) {
   )
   if (length(idx) == 0) idx <- seq_len(nrow(x$grid))
 
-  ord  <- order(x$grid$lambda1[idx])
-  idx  <- idx[ord]
-  l1   <- x$grid$lambda1[idx]
-  cvm  <- x$cvm[idx]
+  ord <- order(x$grid$lambda1[idx])
+  idx <- idx[ord]
+  l1 <- x$grid$lambda1[idx]
+  cvm <- x$cvm[idx]
   cvlo <- x$cvlo[idx]
   cvup <- x$cvup[idx]
-  nz   <- x$nzero[idx]
+  nz <- x$nzero[idx]
 
-  xv   <- log(pmax(l1, .Machine$double.eps))
+  xv <- log(pmax(l1, .Machine$double.eps))
   ylim <- range(c(cvlo, cvup), na.rm = TRUE)
 
   old_par <- par(mar = c(4.5, 4.5, 5, 1))
   on.exit(par(old_par))
 
-  plot(xv, cvm, type = "n", ylim = ylim,
-       xlab = expression(log(lambda[1])),
-       ylab = names(x$name), ...)
+  plot(xv, cvm,
+    type = "n", ylim = ylim,
+    xlab = expression(log(lambda[1])),
+    ylab = names(x$name), ...
+  )
   segments(xv, cvlo, xv, cvup, col = "grey60")
   points(xv, cvm, pch = 20, col = "red")
   v_min <- log(max(x$lambda.min$lambda1, .Machine$double.eps))
@@ -324,19 +316,21 @@ plot.cv.coxtrans <- function(x, ...) {
   invisible(x)
 }
 
+cv_select_fit <- function(object, s) {
+  if (s == "lambda.1se" && !is.null(object$coxtrans.fit.1se)) {
+    object$coxtrans.fit.1se
+  } else {
+    object$coxtrans.fit
+  }
+}
+
 #' @param object A \code{cv.coxtrans} object.
 #' @param s Which model to extract: \code{"lambda.min"} (default) or
 #'   \code{"lambda.1se"}.
 #' @rdname cv.coxtrans
 #' @export
 coef.cv.coxtrans <- function(object, s = c("lambda.min", "lambda.1se"), ...) {
-  s <- match.arg(s)
-  fit <- if (s == "lambda.1se" && !is.null(object$coxtrans.fit.1se)) {
-    object$coxtrans.fit.1se
-  } else {
-    object$coxtrans.fit
-  }
-  coef(fit, ...)
+  coef(cv_select_fit(object, match.arg(s)), ...)
 }
 
 #' @param s Which model to predict from: \code{"lambda.min"} (default) or
@@ -345,11 +339,5 @@ coef.cv.coxtrans <- function(object, s = c("lambda.min", "lambda.1se"), ...) {
 #' @export
 predict.cv.coxtrans <- function(object,
                                 s = c("lambda.min", "lambda.1se"), ...) {
-  s <- match.arg(s)
-  fit <- if (s == "lambda.1se" && !is.null(object$coxtrans.fit.1se)) {
-    object$coxtrans.fit.1se
-  } else {
-    object$coxtrans.fit
-  }
-  predict(fit, ...)
+  predict(cv_select_fit(object, match.arg(s)), ...)
 }

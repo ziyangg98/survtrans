@@ -4,16 +4,12 @@
 \alias{predict.ncvcox}
 \title{Prediction method for \code{ncvcox} objects.}
 \usage{
-\method{predict}{ncvcox}(object, newdata = NULL, newgroup = NULL, type = c("lp", "risk"), ...)
+\method{predict}{ncvcox}(object, newdata, type = c("lp", "risk"), ...)
 }
 \arguments{
 \item{object}{An object of class \code{ncvcox}.}
 
-\item{newdata}{Optional new data for making predictions. If omitted,
-predictions are made using the data used for fitting the model.}
-
-\item{newgroup}{Optional new group for making predictions. If omitted,
-predictions are made using the groups from the original data.}
+\item{newdata}{New data for making predictions.}
 
 \item{type}{The type of prediction to perform. Options include:
 \describe{

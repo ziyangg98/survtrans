@@ -24,40 +24,8 @@ diagnose <- function(object, ...) {
   UseMethod("diagnose")
 }
 
-#' Preprocess Survival Data
-#'
-#' This function preprocesses survival data for a Cox transfer analysis. It
-#' performs several steps including extracting the response and covariates from
-#' a model frame, standardizing the covariates, ensuring the validity of offsets
-#' and grouping, and sorting the data by survival time in descending order.
-#'
-#' @param formula A formula specifying the survival model
-#' (e.g., Surv(time, status) ~ covariates).
-#' @param data A data frame containing the variables referenced in the formula.
-#' @param group Optional grouping vector.
-#' @param offset Optional offset vector.
-#'
-#' @details
-#' The function first creates a model frame from the provided formula and data,
-#' then extracts the response variable, which should contain the survival time
-#' and censoring status. The covariates are extracted using a model matrix and
-#' standardized using the scale function. The function also checks the
-#' \code{group} and \code{offset} arguments, assigning default values if they
-#' are not provided. Finally, all components (time, status, covariates, group,
-#' and offset) are sorted in descending order based on the survival time.
-#'
-#' @return A list with the following components:
-#' \describe{
-#'   \item{x}{A matrix of standardized covariates.}
-#'   \item{time}{A vector of survival times, sorted in descending order.}
-#'   \item{status}{A vector of censoring indicators, corresponding to the sorted
-#'                 survival times.}
-#'   \item{group}{A factor vector representing the group classification for each
-#'                sample, sorted by time.}
-#'   \item{offset}{A numeric vector representing offsets for each sample, sorted
-#'                 by time.}
-#' }
-preprocess <- function(formula, data, group, offset) {
+# Internal: standard grouped Cox training data.
+cox_data <- function(formula, data, group, offset) {
   mf <- stats::model.frame(formula, data)
   y <- stats::model.response(mf)
   time <- y[, 1]
@@ -94,7 +62,7 @@ preprocess <- function(formula, data, group, offset) {
 }
 
 # Internal: capture the rhs design specification used at fit time.
-design_spec <- function(formula, data) {
+cox_design <- function(formula, data) {
   mf <- stats::model.frame(formula, data)
   terms_rhs <- stats::delete.response(stats::terms(mf))
   x_template <- stats::model.matrix(terms_rhs, mf)
@@ -106,7 +74,7 @@ design_spec <- function(formula, data) {
 }
 
 # Internal: replay the training design-matrix construction on new data.
-predict_matrix <- function(design_info, newdata, feature_names) {
+cox_model_matrix <- function(design_info, newdata, feature_names) {
   x <- stats::model.matrix(design_info$terms_rhs,
     newdata,
     xlev = design_info$xlevels,
@@ -126,7 +94,7 @@ predict_matrix <- function(design_info, newdata, feature_names) {
 }
 
 # Internal: validate and align group labels at prediction time.
-check_newgroup <- function(newgroup, group_levels) {
+cox_prediction_group <- function(newgroup, group_levels) {
   group <- factor(newgroup, levels = group_levels)
   if (anyNA(group)) {
     invalid_groups <- unique(as.character(newgroup[is.na(group)]))
@@ -139,7 +107,7 @@ check_newgroup <- function(newgroup, group_levels) {
 }
 
 # Internal: score observations with group-specific coefficient columns.
-score_by_group <- function(x, group, coefficients) {
+cox_linear_predictor <- function(x, group, coefficients) {
   group_levels <- colnames(coefficients)
   lp <- numeric(nrow(x))
   for (k in seq_along(group_levels)) {
@@ -151,16 +119,68 @@ score_by_group <- function(x, group, coefficients) {
   lp
 }
 
-# Internal: collect group-wise indices and linear predictors.
-group_lp <- function(x, group, coefficients) {
-  group_levels <- colnames(coefficients)
-  list(
-    lp = score_by_group(x, group, coefficients),
-    group_idxs = lapply(group_levels, function(g) which(group == g)),
-    group_levels = group_levels
-  )
+# Internal: compute risk set from hazard, time, and group indices
+cox_risk_set <- function(hazard, time, group_idxs) {
+  risk_set <- numeric(length(hazard))
+  for (k in seq_along(group_idxs)) {
+    idx <- group_idxs[[k]]
+    risk_set[idx] <- ave_max(cumsum(hazard[idx]), time[idx])
+  }
+  risk_set
 }
 
+# Internal: compute per-group linear predictor offset from theta matrix.
+cox_theta_offset <- function(theta, n_features, n_groups, x_by_group,
+                             stacked_group_idxs) {
+  theta_mat <- matrix(as.numeric(theta), nrow = n_features)
+  offset <- numeric(sum(lengths(stacked_group_idxs)))
+  for (k in seq_len(n_groups)) {
+    offset[stacked_group_idxs[[k]]] <-
+      x_by_group[[k]] %*% theta_mat[, k]
+  }
+  offset
+}
+
+# Internal: construct a dense block-diagonal matrix from a list of blocks.
+dense_block_diag <- function(blocks) {
+  total_rows <- sum(vapply(blocks, nrow, 1L))
+  total_cols <- sum(vapply(blocks, ncol, 1L))
+  result <- matrix(0, total_rows, total_cols)
+  r_off <- 0L
+  c_off <- 0L
+  for (blk in blocks) {
+    nr <- nrow(blk)
+    nc <- ncol(blk)
+    result[r_off + seq_len(nr), c_off + seq_len(nc)] <- blk
+    r_off <- r_off + nr
+    c_off <- c_off + nc
+  }
+  result
+}
+
+null_basis <- function(constraints, n_parameters, tol = 1e-8) {
+  if (is.null(constraints) || nrow(constraints) == 0L) {
+    basis <- diag(n_parameters)
+  } else {
+    qr_obj <- qr(t(constraints), tol = tol, LAPACK = FALSE)
+    rank <- qr_obj$rank
+    if (rank >= n_parameters) {
+      basis <- matrix(0, nrow = n_parameters, ncol = 0L)
+    } else {
+      q_full <- qr.Q(qr_obj, complete = TRUE)
+      basis <- q_full[, seq.int(rank + 1L, n_parameters), drop = FALSE]
+    }
+  }
+  colnames(basis) <- if (ncol(basis) > 0L) paste0("phi", seq_len(ncol(basis))) else character(0)
+  basis
+}
+
+safe_solve <- function(x) {
+  tryCatch(
+    solve(x),
+    error = function(e) MASS::ginv(x)
+  )
+}
 
 #' Compute penalty for a numeric vector using specified regularization type.
 #'
@@ -215,9 +235,8 @@ penalty_value <- function(x, penalty, lambda, gamma) {
   )
 }
 
-# Internal: compute null-model score statistics for each group.
-calc_group_scores <- function(formula, data, group, offset = NULL) {
-  data <- preprocess(formula, data, group, offset)
+coxtrans_null_scores <- function(formula, data, group, offset = NULL) {
+  data <- cox_data(formula, data, group, offset)
   x <- data$x
   time <- data$time
   status <- data$status
@@ -243,46 +262,23 @@ calc_group_scores <- function(formula, data, group, offset = NULL) {
   scores
 }
 
-calc_lambda1_max <- function(formula, data, group, target, offset = NULL) {
-  if (!is.factor(group)) group <- factor(group)
-  target_level <- as.character(target)
-  scores <- calc_group_scores(formula, data, group, offset)
-  if (!target_level %in% colnames(scores)) {
-    stop("target '", target_level, "' not found in group levels")
-  }
-  max(abs(scores[, target_level]), na.rm = TRUE)
-}
-
-calc_lambda2_max <- function(formula, data, group, target, offset = NULL) {
-  if (!is.factor(group)) group <- factor(group)
-  target_level <- as.character(target)
-  scores <- calc_group_scores(formula, data, group, offset)
-  if (!target_level %in% colnames(scores)) {
-    stop("target '", target_level, "' not found in group levels")
-  }
-  source_levels <- setdiff(colnames(scores), target_level)
-  if (length(source_levels) == 0) {
-    return(0)
-  }
-  target_scores <- scores[, target_level]
-  local_scores <- sweep(scores[, source_levels, drop = FALSE], 1, target_scores)
-  max(abs(local_scores), na.rm = TRUE)
-}
-
-calc_lambda3_max <- function(
+coxtrans_penalty_bounds <- function(
   formula, data, group, target, prior_matrix = NULL, offset = NULL
 ) {
   if (!is.factor(group)) group <- factor(group)
   target_level <- as.character(target)
-  scores <- calc_group_scores(formula, data, group, offset)
+  scores <- coxtrans_null_scores(formula, data, group, offset)
   if (!target_level %in% colnames(scores)) {
     stop("target '", target_level, "' not found in group levels")
   }
-
+  lambda1 <- max(abs(scores[, target_level]), na.rm = TRUE)
   source_levels <- setdiff(colnames(scores), target_level)
   if (length(source_levels) == 0) {
-    return(0)
+    return(list(lambda1 = lambda1, lambda2 = 0, lambda3 = 0))
   }
+  target_scores <- scores[, target_level]
+  local_scores <- sweep(scores[, source_levels, drop = FALSE], 1, target_scores)
+  lambda2 <- max(abs(local_scores), na.rm = TRUE)
   if (is.null(prior_matrix)) {
     source_sizes <- tabulate(group)[match(source_levels, levels(group))]
     prior_matrix <- matrix(source_sizes / sum(source_sizes), nrow = 1)
@@ -296,15 +292,14 @@ calc_lambda3_max <- function(
   }
 
   source_scores <- scores[, source_levels, drop = FALSE]
-  target_scores <- scores[, target_level]
-  lambda3_max <- vapply(seq_len(nrow(prior_matrix)), function(g) {
+  lambda3 <- vapply(seq_len(nrow(prior_matrix)), function(g) {
     prior_scores <- as.numeric(
       prior_matrix[g, , drop = FALSE] %*% t(source_scores)
     )
     max(abs(target_scores - prior_scores), na.rm = TRUE)
   }, numeric(1))
-  names(lambda3_max) <- rownames(prior_matrix)
-  lambda3_max
+  names(lambda3) <- rownames(prior_matrix)
+  list(lambda1 = lambda1, lambda2 = lambda2, lambda3 = lambda3)
 }
 
 #' Calculate the maximum value of the penalty parameter lambda
@@ -323,11 +318,10 @@ calc_lambda_max <- function(formula, data, group, offset = NULL) {
   if (!is.factor(group)) group <- factor(group)
   target_levels <- levels(group)
   max(vapply(target_levels, function(target) {
-    max(
-      calc_lambda1_max(formula, data, group, target, offset = offset),
-      calc_lambda2_max(formula, data, group, target, offset = offset),
-      calc_lambda3_max(formula, data, group, target, offset = offset)
+    bounds <- coxtrans_penalty_bounds(
+      formula, data, group, target, offset = offset
     )
+    max(bounds$lambda1, bounds$lambda2, bounds$lambda3)
   }, numeric(1)))
 }
 
@@ -395,152 +389,4 @@ simsurv_tl <- function(
   names(df)[names(df) == "eventtime"] <- "time"
   df$id <- seq_len(nrow(df))
   df
-}
-
-# Internal: compute risk set from hazard, time, and group indices
-calc_risk_set <- function(hazard, time, group_idxs) {
-  risk_set <- numeric(length(hazard))
-  for (k in seq_along(group_idxs)) {
-    idx <- group_idxs[[k]]
-    risk_set[idx] <- ave_max(cumsum(hazard[idx]), time[idx])
-  }
-  risk_set
-}
-
-# Internal: compute per-group linear predictor offset from theta matrix
-calc_offset <- function(theta, n_features, n_groups, x_by_group,
-                        stacked_group_idxs) {
-  theta_mat <- matrix(as.numeric(theta), nrow = n_features)
-  offset <- numeric(sum(lengths(stacked_group_idxs)))
-  for (k in seq_len(n_groups)) {
-    offset[stacked_group_idxs[[k]]] <-
-      x_by_group[[k]] %*% theta_mat[, k]
-  }
-  offset
-}
-
-# Internal: construct a dense block-diagonal matrix from a list of blocks
-block_diag <- function(blocks) {
-  total_rows <- sum(vapply(blocks, nrow, 1L))
-  total_cols <- sum(vapply(blocks, ncol, 1L))
-  result <- matrix(0, total_rows, total_cols)
-  r_off <- 0L
-  c_off <- 0L
-  for (blk in blocks) {
-    nr <- nrow(blk)
-    nc <- ncol(blk)
-    result[r_off + seq_len(nr), c_off + seq_len(nc)] <- blk
-    r_off <- r_off + nr
-    c_off <- c_off + nc
-  }
-  result
-}
-
-make_group_parameter_names <- function(feature_names, group_levels) {
-  unlist(lapply(group_levels, function(g) {
-    paste(feature_names, g, sep = ":")
-  }))
-}
-
-theta_to_matrix <- function(theta, n_features, group_levels, feature_names) {
-  coefficients <- matrix(as.numeric(theta), nrow = n_features)
-  colnames(coefficients) <- group_levels
-  rownames(coefficients) <- feature_names
-  coefficients
-}
-
-null_basis <- function(constraints, n_parameters, tol = 1e-8) {
-  if (is.null(constraints) || nrow(constraints) == 0L) {
-    basis <- diag(n_parameters)
-  } else {
-    sv <- svd(constraints, nu = 0, nv = n_parameters)
-    rank <- sum(sv$d > tol * max(1, sv$d[1]))
-    if (rank >= n_parameters) {
-      basis <- matrix(0, nrow = n_parameters, ncol = 0L)
-    } else {
-      basis <- sv$v[, seq.int(rank + 1L, n_parameters), drop = FALSE]
-    }
-  }
-  colnames(basis) <- if (ncol(basis) == 0L) {
-    character(0)
-  } else {
-    paste0("phi", seq_len(ncol(basis)))
-  }
-  basis
-}
-
-project_to_basis <- function(theta, basis) {
-  if (ncol(basis) == 0L) {
-    return(numeric(0))
-  }
-  as.numeric(crossprod(basis, theta))
-}
-
-safe_solve <- function(x) {
-  tryCatch(
-    solve(x),
-    error = function(e) MASS::ginv(x)
-  )
-}
-
-#' @importFrom utils head
-build_link_matrix <- function(coefficients, active_local = NULL,
-                              active_prior = NULL, prior_matrix = NULL) {
-  stopifnot(is.matrix(coefficients), ncol(coefficients) >= 1)
-  n_groups <- ncol(coefficients)
-  n_features <- nrow(coefficients)
-
-  # For each feature, determine unique free parameters (from sources only
-  # when prior is active, since target is then a derived quantity)
-  phi_list <- vector("list", n_features)
-  # Track whether target is free or constrained by prior for each feature
-  target_constrained <- logical(n_features)
-
-  has_prior <- !is.null(active_prior) && !is.null(prior_matrix)
-
-  for (j in seq_len(n_features)) {
-    if (has_prior && any(active_prior[j, ])) {
-      # Target is constrained: free params are unique source values only
-      target_constrained[j] <- TRUE
-      phi_list[[j]] <- unique(coefficients[j, -1])
-    } else {
-      # Target is free: all groups contribute unique values
-      target_constrained[j] <- FALSE
-      phi_list[[j]] <- unique(coefficients[j, ])
-    }
-  }
-
-  n_unique <- lengths(phi_list)
-  n_phi_total <- sum(n_unique)
-  offsets <- c(0L, head(cumsum(n_unique), -1L))
-
-  # Build link matrix (n_groups * n_features) x n_phi_total
-  link <- matrix(0, n_groups * n_features, n_phi_total)
-
-  for (j in seq_len(n_features)) {
-    if (target_constrained[j]) {
-      # Sources map to their unique values (0/1)
-      for (k in 2:n_groups) {
-        row <- (k - 1L) * n_features + j
-        pos <- which.min(abs(coefficients[j, k] - phi_list[[j]]))
-        link[row, offsets[j] + pos] <- 1
-      }
-      # Target row: weighted combination of source unique values
-      # β₀ = Σ w_i β_i, use first active prior's weights
-      g_active <- which(active_prior[j, ])[1]
-      w <- prior_matrix[g_active, ]
-      for (i in seq_len(n_groups - 1)) {
-        pos <- which.min(abs(coefficients[j, i + 1] - phi_list[[j]]))
-        link[j, offsets[j] + pos] <- link[j, offsets[j] + pos] + w[i]
-      }
-    } else {
-      # All groups map to unique values (0/1)
-      for (k in seq_len(n_groups)) {
-        row <- (k - 1L) * n_features + j
-        pos <- which.min(abs(coefficients[j, k] - phi_list[[j]]))
-        link[row, offsets[j] + pos] <- 1
-      }
-    }
-  }
-  link
 }

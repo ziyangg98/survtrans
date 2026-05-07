@@ -173,25 +173,36 @@ test_that("cv.coxtrans returns a cv.coxtrans object with glmnet-like fields", {
 
 test_that("lambda max values are computed on separate penalty scales", {
   formula <- Surv(time, status) ~ . - group - id
-  l1_max <- survtrans:::calc_lambda1_max(formula, sim2, sim2$group, target = 1)
-  l2_max <- survtrans:::calc_lambda2_max(formula, sim2, sim2$group, target = 1)
-  l3_max <- survtrans:::calc_lambda3_max(formula, sim2, sim2$group, target = 1)
+  bounds <- survtrans:::coxtrans_penalty_bounds(
+    formula, sim2, sim2$group, target = 1
+  )
   group_levels <- levels(factor(sim2$group))
   group_releveled <- factor(sim2$group, levels = rev(group_levels))
   global_max <- max(vapply(group_levels, function(target) {
-    max(
-      survtrans:::calc_lambda1_max(formula, sim2, sim2$group, target = target),
-      survtrans:::calc_lambda2_max(formula, sim2, sim2$group, target = target),
-      survtrans:::calc_lambda3_max(formula, sim2, sim2$group, target = target)
+    b <- survtrans:::coxtrans_penalty_bounds(
+      formula, sim2, sim2$group, target = target
     )
+    max(b$lambda1, b$lambda2, b$lambda3)
   }, numeric(1)))
 
-  expect_true(is.numeric(l1_max) && length(l1_max) == 1L && is.finite(l1_max))
-  expect_true(is.numeric(l2_max) && length(l2_max) == 1L && is.finite(l2_max))
-  expect_true(is.numeric(l3_max) && length(l3_max) == 1L && is.finite(l3_max))
-  expect_true(l1_max >= 0)
-  expect_true(l2_max >= 0)
-  expect_true(all(l3_max >= 0))
+  expect_true(
+    is.numeric(bounds$lambda1) &&
+      length(bounds$lambda1) == 1L &&
+      is.finite(bounds$lambda1)
+  )
+  expect_true(
+    is.numeric(bounds$lambda2) &&
+      length(bounds$lambda2) == 1L &&
+      is.finite(bounds$lambda2)
+  )
+  expect_true(
+    is.numeric(bounds$lambda3) &&
+      length(bounds$lambda3) == 1L &&
+      is.finite(bounds$lambda3)
+  )
+  expect_true(bounds$lambda1 >= 0)
+  expect_true(bounds$lambda2 >= 0)
+  expect_true(all(bounds$lambda3 >= 0))
   expect_equal(
     survtrans:::calc_lambda_max(formula, sim2, sim2$group),
     global_max,
@@ -206,11 +217,13 @@ test_that("lambda max values are computed on separate penalty scales", {
 
 test_that("lambda1_max is large enough to zero the target sparse block", {
   formula <- Surv(time, status) ~ . - group - id
-  l1_max <- survtrans:::calc_lambda1_max(formula, sim2, sim2$group, target = 1)
+  bounds <- survtrans:::coxtrans_penalty_bounds(
+    formula, sim2, sim2$group, target = 1
+  )
 
   fit <- coxtrans(
     formula, sim2, sim2$group, 1,
-    lambda1 = l1_max, lambda2 = 0, lambda3 = 0, penalty = "lasso"
+    lambda1 = bounds$lambda1, lambda2 = 0, lambda3 = 0, penalty = "lasso"
   )
 
   expect_true(all(fit$coefficients[, "1"] == 0))
@@ -220,13 +233,13 @@ test_that(
   "lambda2_max is large enough to merge all source-target differences",
   {
     formula <- Surv(time, status) ~ . - group - id
-    l2_max <- survtrans:::calc_lambda2_max(
+    bounds <- survtrans:::coxtrans_penalty_bounds(
       formula, sim2, sim2$group, target = 1
     )
 
     fit <- coxtrans(
       formula, sim2, sim2$group, 1,
-      lambda1 = 0, lambda2 = l2_max, lambda3 = 0, penalty = "lasso"
+      lambda1 = 0, lambda2 = bounds$lambda2, lambda3 = 0, penalty = "lasso"
     )
 
     expect_true(all(fit$active_local))
@@ -235,11 +248,13 @@ test_that(
 
 test_that("lambda3_max is large enough to activate the prior block", {
   formula <- Surv(time, status) ~ . - group - id
-  l3_max <- survtrans:::calc_lambda3_max(formula, sim2, sim2$group, target = 1)
+  bounds <- survtrans:::coxtrans_penalty_bounds(
+    formula, sim2, sim2$group, target = 1
+  )
 
   fit <- coxtrans(
     formula, sim2, sim2$group, 1,
-    lambda1 = 0, lambda2 = 0, lambda3 = l3_max, penalty = "lasso"
+    lambda1 = 0, lambda2 = 0, lambda3 = bounds$lambda3, penalty = "lasso"
   )
 
   expect_true(all(fit$active_prior[, 1]))
@@ -324,9 +339,9 @@ test_that("refit.coxtrans handles empty active set", {
   expect_true(all(r$coefficients[, "Pr(>|z|)"] == 1))
 })
 
-test_that("preprocess returns standardized data with correct dimensions", {
+test_that("cox_data returns standardized data with correct dimensions", {
   formula <- Surv(time, status) ~ . - group - id
-  result <- survtrans:::preprocess(formula, sim2, group = sim2$group)
+  result <- survtrans:::cox_data(formula, sim2, group = sim2$group)
 
   expect_true(is.matrix(result$x))
   expect_equal(nrow(result$x), nrow(sim2))

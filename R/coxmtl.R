@@ -42,9 +42,9 @@ coxmtl <- function(
     stop("Lambda parameters must be non-negative")
   }
 
-  design_info <- design_spec(formula, data)
+  design_info <- cox_design(formula, data)
 
-  data <- preprocess(formula, data, group = group)
+  data <- cox_data(formula, data, group = group)
   x <- data$x
   x_center <- attr(x, "scaled:center")
   x_scale <- attr(x, "scaled:scale")
@@ -57,8 +57,8 @@ coxmtl <- function(
   n_features <- ncol(x)
   n_parameters <- n_features * n_groups
   feature_names <- colnames(x)
-  param_names <- make_group_parameter_names(feature_names, group_levels)
-  w <- validate_w(w, group_levels)
+  param_names <- as.vector(outer(feature_names, group_levels, paste, sep = ":"))
+  w <- coxmtl_validate_weights(w, group_levels)
 
   n_centers <- nrow(w)
   if (length(lambda3) == 1L) lambda3 <- rep(lambda3, n_centers)
@@ -66,7 +66,7 @@ coxmtl <- function(
     stop("lambda3 must be length 1 or ", n_centers, " (one per row of w)")
   }
 
-  constraints <- build_constraints(feature_names, group_levels, w)
+  constraints <- coxmtl_build_constraints(feature_names, group_levels, w)
   contr_pen <- constraints$contr_pen
   contr_cross <- constraints$contr_cross
   group_idxs <- lapply(group_levels, function(g) which(group == g))
@@ -75,17 +75,14 @@ coxmtl <- function(
   time_stacked <- unlist(lapply(group_idxs, function(idx) time[idx]))
   status_stacked <- unlist(lapply(group_idxs, function(idx) status[idx]))
 
-  stacked_group_idxs <- vector("list", n_groups)
-  n_passes <- 0L
-  for (k in seq_len(n_groups)) {
-    nk <- length(group_idxs[[k]])
-    stacked_group_idxs[[k]] <- n_passes + seq_len(nk)
-    n_passes <- n_passes + nk
-  }
+  sizes <- lengths(group_idxs)
+  ends <- cumsum(sizes)
+  starts <- c(1L, head(ends, -1L) + 1L)
+  stacked_group_idxs <- Map(seq, starts, ends)
   blk_idx <- lapply(seq_len(n_groups), function(k) {
     ((k - 1L) * n_features + 1L):(k * n_features)
   })
-  blocks <- penalty_blocks(
+  blocks <- coxmtl_build_penalty_blocks(
     constraints$sparse_idx, constraints$pair_rows, constraints$center_idx,
     lambda1, lambda2, lambda3
   )
@@ -112,7 +109,7 @@ coxmtl <- function(
   repeat {
     n_iterations <- n_iterations + 1L
 
-    offset <- calc_offset(
+    offset <- cox_theta_offset(
       theta, n_features, n_groups, x_by_group, stacked_group_idxs
     )
     for (k in seq_len(n_groups)) {
@@ -144,7 +141,7 @@ coxmtl <- function(
 
     c_theta <- as.numeric(contr_pen %*% theta)
     eta_old <- eta
-    eta <- update_penalties(
+    eta <- coxmtl_apply_penalty_blocks(
       c_theta + nu / vartheta, blocks, vartheta, penalty, gamma
     )
     nu <- nu + vartheta * (c_theta - eta)
@@ -158,14 +155,15 @@ coxmtl <- function(
     eps_dual <- sqrt(n_parameters) * control$abstol +
       control$reltol * sqrt(sum(dual_vec^2))
 
-    offset <- calc_offset(
+    # re-evaluate at updated theta for convergence diagnostics
+    offset <- cox_theta_offset(
       theta, n_features, n_groups, x_by_group, stacked_group_idxs
     )
     hazard <- exp(offset)
-    risk_set <- calc_risk_set(hazard, time_stacked, stacked_group_idxs)
+    risk_set <- cox_risk_set(hazard, time_stacked, stacked_group_idxs)
     loss <- sum(status_stacked * (offset - log(risk_set)))
 
-    loss_penalty <- sum_penalties(
+    loss_penalty <- coxmtl_penalty_value(
       c_theta, blocks, penalty, gamma
     ) * n_samples_total
     loss_total <- loss - loss_penalty
@@ -208,9 +206,9 @@ coxmtl <- function(
   }
 
   eps <- .Machine$double.eps^0.5
-  active_mask <- abs(eta) < eps
+  binding <- abs(eta) < eps # TRUE where constraint is tight (eta ≈ 0)
   active_sparse <- matrix(
-    active_mask[constraints$sparse_idx],
+    binding[constraints$sparse_idx],
     nrow = n_features,
     ncol = n_groups
   )
@@ -219,7 +217,7 @@ coxmtl <- function(
 
   if (constraints$n_pairs > 0L) {
     active_pair <- matrix(
-      active_mask[constraints$pair_rows],
+      binding[constraints$pair_rows],
       nrow = n_features,
       ncol = constraints$n_pairs
     )
@@ -231,26 +229,24 @@ coxmtl <- function(
   }
 
   active_w <- matrix(
-    active_mask[constraints$center_rows],
+    binding[constraints$center_rows],
     nrow = n_features,
     ncol = n_centers * n_groups
   )
   colnames(active_w) <- constraints$center_labels
   rownames(active_w) <- feature_names
 
-  active_constraints <- contr_pen[active_mask, , drop = FALSE]
-  basis <- null_basis(active_constraints, n_parameters)
+  # Project unstandardized theta onto the null space of binding constraints
+  binding_constr <- contr_pen[binding, , drop = FALSE]
+  basis <- null_basis(binding_constr, n_parameters)
   rownames(basis) <- param_names
-  beta_vec <- theta / rep(x_scale, times = n_groups)
-  phi <- project_to_basis(beta_vec, basis)
+  theta_unscaled <- theta / rep(x_scale, times = n_groups)
+  phi <- if (ncol(basis) > 0L) as.numeric(crossprod(basis, theta_unscaled)) else numeric(0)
   names(phi) <- colnames(basis)
-  beta_exact <- if (ncol(basis) == 0L) {
-    numeric(n_parameters)
-  } else {
-    as.numeric(basis %*% phi)
-  }
-  coefficients <- theta_to_matrix(
-    beta_exact, n_features, group_levels, feature_names
+  beta_exact <- if (ncol(basis) > 0L) as.numeric(basis %*% phi) else numeric(n_parameters)
+  coefficients <- matrix(
+    beta_exact, nrow = n_features,
+    dimnames = list(feature_names, group_levels)
   )
   x <- sweep(x, 2, x_scale, "*")
 
@@ -287,12 +283,12 @@ coxmtl <- function(
   fit
 }
 
-validate_w <- function(w, group_levels, tol = 1e-8) {
+coxmtl_validate_weights <- function(w, group_levels, tol = 1e-8) {
   if (missing(w) || is.null(w)) {
     stop("w must be provided")
   }
   w <- as.matrix(w)
-  if (!is.numeric(w) || length(dim(w)) != 2L) {
+  if (!is.numeric(w)) {
     stop("w must be a numeric matrix")
   }
   if (nrow(w) < 1L) {
@@ -325,10 +321,10 @@ validate_w <- function(w, group_levels, tol = 1e-8) {
   w
 }
 
-build_constraints <- function(feature_names, group_levels, w) {
+coxmtl_build_constraints <- function(feature_names, group_levels, w) {
   n_features <- length(feature_names)
   n_groups <- length(group_levels)
-  param_names <- make_group_parameter_names(feature_names, group_levels)
+  param_names <- as.vector(outer(feature_names, group_levels, paste, sep = ":"))
 
   pair_index <- if (n_groups < 2L) {
     matrix(character(0), nrow = 0L, ncol = 2L)
@@ -383,17 +379,16 @@ build_constraints <- function(feature_names, group_levels, w) {
   rownames(contr_pen) <- c(
     paste0("sparse:", param_names),
     if (n_pairs) {
-      unlist(lapply(pair_labels, function(lbl) {
-        paste0("pair:", lbl, ":", feature_names)
-      }))
-    } else {
-      character(0)
+      paste0(
+        "pair:", rep(pair_labels, each = n_features),
+        ":", feature_names
+      )
     },
-    unlist(lapply(rownames(w), function(lbl) {
-      unlist(lapply(group_levels, function(g) {
-        paste0("center:", lbl, "->", g, ":", feature_names)
-      }))
-    }))
+    paste0(
+      "center:", rep(rownames(w), each = n_groups * n_features),
+      "->", rep(group_levels, times = n_centers, each = n_features),
+      ":", feature_names
+    )
   )
 
   list(
@@ -414,22 +409,18 @@ build_constraints <- function(feature_names, group_levels, w) {
   )
 }
 
-penalty_blocks <- function(sparse_idx, pair_rows, center_idx,
-                           lambda1, lambda2, lambda3) {
-  blocks <- list(list(idx = sparse_idx, lambda = lambda1))
-  if (length(pair_rows) > 0L) {
-    blocks[[length(blocks) + 1L]] <- list(idx = pair_rows, lambda = lambda2)
-  }
-  for (g in seq_along(center_idx)) {
-    blocks[[length(blocks) + 1L]] <- list(
-      idx = center_idx[[g]],
-      lambda = lambda3[g]
-    )
-  }
-  blocks
+coxmtl_build_penalty_blocks <- function(sparse_idx, pair_rows, center_idx,
+                                        lambda1, lambda2, lambda3) {
+  c(
+    list(list(idx = sparse_idx, lambda = lambda1)),
+    if (length(pair_rows) > 0L) list(list(idx = pair_rows, lambda = lambda2)),
+    lapply(seq_along(center_idx), function(g) {
+      list(idx = center_idx[[g]], lambda = lambda3[g])
+    })
+  )
 }
 
-update_penalties <- function(
+coxmtl_apply_penalty_blocks <- function(
   values, blocks, vartheta, penalty, gamma
 ) {
   for (block in blocks) {
@@ -440,7 +431,7 @@ update_penalties <- function(
   values
 }
 
-sum_penalties <- function(values, blocks, penalty, gamma) {
+coxmtl_penalty_value <- function(values, blocks, penalty, gamma) {
   sum(vapply(blocks, function(block) {
     penalty_value(values[block$idx], penalty, block$lambda, gamma)
   }, numeric(1)))
@@ -476,10 +467,11 @@ coef.coxmtl <- function(object, ...) {
 #'   \code{coxmtl} object.
 #' @export
 logLik.coxmtl <- function(object, ...) {
-  res <- group_lp(object$x, object$group, object$coefficients)
-  hazard <- exp(res$lp)
-  risk_set <- calc_risk_set(hazard, object$time, res$group_idxs)
-  sum(object$status * (res$lp - log(risk_set)))
+  group_levels <- colnames(object$coefficients)
+  group_idxs <- lapply(group_levels, function(g) which(object$group == g))
+  lp <- cox_linear_predictor(object$x, object$group, object$coefficients)
+  risk_set <- cox_risk_set(exp(lp), object$time, group_idxs)
+  sum(object$status * (lp - log(risk_set)))
 }
 
 #' Prediction method for \code{coxmtl} objects
@@ -505,7 +497,7 @@ predict.coxmtl <- function(
     x <- object$x
     group <- object$group
   } else {
-    x <- predict_matrix(
+    x <- cox_model_matrix(
       object$design_info,
       newdata,
       rownames(object$coefficients)
@@ -517,10 +509,10 @@ predict.coxmtl <- function(
         stop("newgroup must be supplied when newdata has no group column")
       }
     }
-    group <- check_newgroup(newgroup, levels(object$group))
+    group <- cox_prediction_group(newgroup, levels(object$group))
   }
 
-  lp <- score_by_group(x, group, object$coefficients)
+  lp <- cox_linear_predictor(x, group, object$coefficients)
   if (type == "risk") lp <- exp(lp)
   lp
 }
@@ -533,23 +525,22 @@ predict.coxmtl <- function(
 #'   strata columns.
 #' @export
 basehaz.coxmtl <- function(object, ...) {
-  res <- group_lp(object$x, object$group, object$coefficients)
-  hazard <- exp(res$lp)
-  risk_set <- calc_risk_set(hazard, object$time, res$group_idxs)
+  group_levels <- colnames(object$coefficients)
+  group_idxs <- lapply(group_levels, function(g) which(object$group == g))
+  lp <- cox_linear_predictor(object$x, object$group, object$coefficients)
+  risk_set <- cox_risk_set(exp(lp), object$time, group_idxs)
 
-  out <- vector("list", length(res$group_idxs))
-  for (k in seq_along(res$group_idxs)) {
-    idx <- res$group_idxs[[k]]
+  out <- lapply(seq_along(group_idxs), function(k) {
+    idx <- group_idxs[[k]]
     time_rev <- rev(object$time[idx])
     status_rev <- rev(object$status[idx])
-    risk_set_rev <- rev(risk_set[idx])
-    bh <- cumsum(status_rev / risk_set_rev)
-    out[[k]] <- data.frame(
-      time = time_rev[status_rev == 1],
+    bh <- cumsum(status_rev / rev(risk_set[idx]))
+    data.frame(
+      time    = time_rev[status_rev == 1],
       basehaz = bh[status_rev == 1],
-      strata = res$group_levels[k]
+      strata  = group_levels[k]
     )
-  }
+  })
   do.call(rbind, out)
 }
 
@@ -571,19 +562,22 @@ vcov.coxmtl <- function(object, ...) {
 
   group_levels <- colnames(object$coefficients)
   group_idxs <- lapply(group_levels, function(g) which(object$group == g))
-  z <- block_diag(lapply(group_idxs, function(idx) {
+  z <- dense_block_diag(lapply(group_idxs, function(idx) {
     object$x[idx, , drop = FALSE]
   })) %*% object$basis
   time <- unlist(lapply(group_idxs, function(idx) object$time[idx]))
   status <- unlist(lapply(group_idxs, function(idx) object$status[idx]))
   lp <- as.numeric(z %*% phi)
 
+  sizes_v <- lengths(group_idxs)
+  ends_v <- cumsum(sizes_v)
+  starts_v <- c(1L, head(ends_v, -1L) + 1L)
+  stacked_idxs <- Map(seq, starts_v, ends_v)
+
   gradients <- matrix(0, nrow = nrow(z), ncol = n_phi)
   hessians <- matrix(0, nrow = nrow(z), ncol = n_phi^2)
-  n_passes <- 0L
   for (k in seq_along(group_idxs)) {
-    idx <- n_passes + seq_along(group_idxs[[k]])
-    n_passes <- n_passes + length(idx)
+    idx <- stacked_idxs[[k]]
     ghs <- calc_grad_hess(
       lp[idx], z[idx, , drop = FALSE], time[idx], status[idx]
     )
@@ -701,6 +695,170 @@ print.summary.coxmtl <- function(
 
   cat("\nGlobal centers (w):\n")
   print(format(x$w, digits = digits), quote = FALSE)
+  invisible(x)
+}
+
+#' Refit a coxmtl model with hard constraints (oracle estimator)
+#'
+#' Extracts the active constraint structure from a penalized \code{coxmtl} fit,
+#' encodes it as hard constraints via the QR null-space basis, and fits an
+#' unpenalized stratified Cox model in the reparametrized space. Returns
+#' debiased MLE coefficients and valid standard errors for all groups.
+#'
+#' @param object A fitted \code{coxmtl} object.
+#' @param ... Additional arguments (unused).
+#'
+#' @return An object of class \code{refit.coxmtl} with components:
+#'   \item{coefficients}{Matrix (p x K) of oracle refitted coefficients.}
+#'   \item{se}{Matrix (p x K) of standard errors (delta method).}
+#'   \item{phi_hat}{Named numeric vector of free-parameter (phi) estimates.}
+#'   \item{coxph_fit}{The underlying \code{coxph} object, or \code{NULL}.}
+#'   \item{n}{Total observations used.}
+#'   \item{nevent}{Number of events.}
+#'   \item{active_features}{Integer vector: features non-zero in any group.}
+#'   \item{basis}{The null-space basis \eqn{B} from the penalized fit.}
+#'
+#' @details
+#' Oracle refit procedure:
+#' \enumerate{
+#'   \item Use the null-space basis \eqn{B} stored in the penalized fit, which
+#'     encodes active sparsity, pairwise fusion, and center constraints.
+#'   \item Build reparametrized design
+#'     \eqn{Z = \mathrm{bdiag}(X_1,\ldots,X_K)\,B}.
+#'   \item Fit \code{coxph(Surv(time,status) ~ Z + strata(group))} —
+#'     unpenalized stratified Cox with all active constraints hard-coded in
+#'     the design.
+#'   \item Map back via \eqn{\hat\beta = B\hat\phi}; compute standard errors
+#'     via the delta method.
+#' }
+#'
+#' @rdname refit
+#' @export
+refit.coxmtl <- function(object, ...) {
+  p <- nrow(object$coefficients)
+  n_groups <- ncol(object$coefficients)
+  feature_names <- rownames(object$coefficients)
+  group_levels <- colnames(object$coefficients)
+  n_phi <- ncol(object$basis)
+
+  active_features <- which(apply(abs(object$coefficients) > 1e-8, 1, any))
+
+  zero_mat <- matrix(0, p, n_groups,
+    dimnames = list(feature_names, group_levels)
+  )
+
+  make_result <- function(coef_mat, se_mat = zero_mat,
+                          coxph_fit = NULL, phi_hat = numeric(0),
+                          n = 0L, nevent = 0L) {
+    out <- list(
+      coefficients = coef_mat,
+      se = se_mat,
+      phi_hat = phi_hat,
+      coxph_fit = coxph_fit,
+      n = n,
+      nevent = nevent,
+      active_features = active_features,
+      basis = object$basis,
+      group_levels = group_levels,
+      feature_names = feature_names
+    )
+    class(out) <- "refit.coxmtl"
+    out
+  }
+
+  if (n_phi == 0L) {
+    return(make_result(zero_mat))
+  }
+
+  group_idxs <- lapply(group_levels, function(g) which(object$group == g))
+
+  z_mat <- dense_block_diag(lapply(group_idxs, function(idx) {
+    object$x[idx, , drop = FALSE]
+  })) %*% object$basis
+  colnames(z_mat) <- paste0("phi", seq_len(n_phi))
+
+  time_s <- unlist(lapply(group_idxs, function(idx) object$time[idx]))
+  status_s <- unlist(lapply(group_idxs, function(idx) object$status[idx]))
+  strata_s <- factor(rep(seq_along(group_idxs), lengths(group_idxs)))
+
+  df_refit <- as.data.frame(z_mat)
+  df_refit$time <- time_s
+  df_refit$status <- status_s
+  df_refit$strata_var <- strata_s
+
+  fml <- stats::as.formula(
+    paste(
+      "survival::Surv(time, status) ~",
+      paste(colnames(z_mat), collapse = " + "),
+      "+ strata(strata_var)"
+    ),
+    env = list2env(list(strata = survival::strata), parent = baseenv())
+  )
+  coxph_fit <- tryCatch(
+    survival::coxph(fml, data = df_refit),
+    error = function(e) NULL
+  )
+  if (is.null(coxph_fit)) {
+    return(make_result(zero_mat))
+  }
+
+  phi_hat <- stats::coef(coxph_fit)
+  beta_vec <- as.numeric(object$basis %*% phi_hat)
+  coef_mat <- matrix(beta_vec,
+    nrow = p, ncol = n_groups,
+    dimnames = list(feature_names, group_levels)
+  )
+
+  vcov_phi <- stats::vcov(coxph_fit)
+  se_mat <- zero_mat
+  for (k in seq_len(n_groups)) {
+    rows_k <- (k - 1L) * p + seq_len(p)
+    l_k <- object$basis[rows_k, , drop = FALSE]
+    se_mat[, k] <- sqrt(pmax(diag(l_k %*% vcov_phi %*% t(l_k)), 0))
+  }
+
+  make_result(coef_mat, se_mat, coxph_fit, phi_hat,
+    n = nrow(df_refit), nevent = sum(status_s)
+  )
+}
+
+#' Print method for a \code{refit.coxmtl} object
+#'
+#' @param x A \code{refit.coxmtl} object.
+#' @param digits Number of significant digits.
+#' @param signif.stars Logical; print significance stars.
+#' @param ... Additional arguments (unused).
+#' @return Invisibly returns \code{x}.
+#' @export
+print.refit.coxmtl <- function(
+  x, digits = max(getOption("digits") - 3, 3),
+  signif.stars = getOption("show.signif.stars"), ...
+) {
+  cat("Refit coxmtl (unpenalized MLE, hard constraints)\n")
+  cat("  n=", x$n, ", events=", x$nevent, "\n\n", sep = "")
+
+  if (length(x$active_features) == 0L) {
+    cat("  No active features.\n")
+    return(invisible(x))
+  }
+
+  jj <- x$active_features
+  for (k in seq_along(x$group_levels)) {
+    cat("Group:", x$group_levels[k], "\n")
+    beta_k <- x$coefficients[jj, k]
+    se_k <- x$se[jj, k]
+    z_k <- ifelse(se_k > 0, beta_k / se_k, 0)
+    p_k <- ifelse(se_k > 0, stats::pchisq(z_k^2, 1, lower.tail = FALSE), 1)
+    cm <- cbind(beta_k, exp(beta_k), se_k, z_k, p_k)
+    colnames(cm) <- c("coef", "exp(coef)", "se(coef)", "z", "Pr(>|z|)")
+    rownames(cm) <- x$feature_names[jj]
+    stats::printCoefmat(
+      cm,
+      digits = digits, signif.stars = signif.stars,
+      cs.ind = 1:3, tst.ind = 4, P.values = TRUE, has.Pvalue = TRUE
+    )
+    cat("\n")
+  }
   invisible(x)
 }
 
