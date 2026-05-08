@@ -25,10 +25,10 @@ arma::vec threshold_prox(const arma::vec& y, double vartheta, std::string penalt
       x[i] = soft_threshold(y[i], lambda / vartheta);
     }
   } else if (penalty == "mcp") {
-    double const_val = 1 - 1 / (gamma * vartheta - 1);
+    double denom = 1.0 - 1.0 / (gamma * vartheta);
     for (int i = 0; i < n; i++) {
       if (std::abs(y[i]) <= lambda * gamma) {
-        x[i] = soft_threshold(y[i], lambda / vartheta) * const_val;
+        x[i] = soft_threshold(y[i], lambda / vartheta) / denom;
       } else {
         x[i] = y[i];
       }

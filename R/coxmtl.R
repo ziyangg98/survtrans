@@ -17,7 +17,8 @@
 #'   \code{"SCAD"}.
 #' @param gamma Concavity parameter for MCP/SCAD. Default 3.7 (SCAD) or
 #'   3.0 (MCP).
-#' @param vartheta Fixed augmented Lagrangian parameter. Default 1.0.
+#' @param vartheta Initial augmented Lagrangian parameter. If \code{NULL},
+#'   lasso uses 1.0 and non-convex penalties use a curvature-safe value.
 #' @param control A \link{survtrans_control} object.
 #' @param ... Additional arguments passed to \code{survtrans_control}.
 #'
@@ -32,11 +33,21 @@ coxmtl <- function(
     SCAD = 3.7,
     MCP = 3,
     1
-  ), vartheta = 1.0,
+  ), vartheta = NULL,
   control, ...
 ) {
   penalty <- match.arg(penalty, choices = c("lasso", "MCP", "SCAD"))
   if (missing(control)) control <- survtrans_control(...)
+  vartheta_min <- switch(penalty,
+    MCP = 1.5 / gamma,
+    SCAD = 1.5 / (gamma - 1),
+    0
+  )
+  if (is.null(vartheta)) vartheta <- if (penalty == "lasso") 1 else vartheta_min
+  if (!is.numeric(vartheta) || length(vartheta) != 1L || vartheta <= 0) {
+    stop("Invalid value for vartheta")
+  }
+  vartheta <- max(vartheta, vartheta_min)
   set_omp_threads(control$nthreads)
   if (lambda1 < 0 || lambda2 < 0 || any(lambda3 < 0)) {
     stop("Lambda parameters must be non-negative")
@@ -103,8 +114,6 @@ coxmtl <- function(
 
   weights <- numeric(n_samples_total)
   z <- numeric(n_samples_total)
-  lag_aug_prev <- Inf
-  loss_total_prev <- Inf
 
   repeat {
     n_iterations <- n_iterations + 1L
@@ -154,6 +163,12 @@ coxmtl <- function(
     dual_vec <- crossprod(contr_pen, nu)
     eps_dual <- sqrt(n_parameters) * control$abstol +
       control$reltol * sqrt(sum(dual_vec^2))
+    vartheta_next <- vartheta
+    if (r_norm / eps_pri > 10 * s_norm / eps_dual) {
+      vartheta_next <- 2 * vartheta
+    } else if (s_norm / eps_dual > 10 * r_norm / eps_pri) {
+      vartheta_next <- max(vartheta / 2, vartheta_min)
+    }
 
     # re-evaluate at updated theta for convergence diagnostics
     offset <- cox_theta_offset(
@@ -167,9 +182,6 @@ coxmtl <- function(
       c_theta, blocks, penalty, gamma
     ) * n_samples_total
     loss_total <- loss - loss_penalty
-    lag_aug <- loss_total +
-      sum(nu * (c_theta - eta)) +
-      0.5 * vartheta * sum((c_theta - eta)^2)
 
     if (r_norm < eps_pri && s_norm < eps_dual) {
       converged <- TRUE
@@ -177,19 +189,10 @@ coxmtl <- function(
     } else if (is.infinite(loss) || is.nan(loss)) {
       converged <- TRUE
       msg <- "Log-likelihood is not finite. Stopping."
-    } else if (n_iterations > 1L && (
-      abs(lag_aug - lag_aug_prev) / (abs(lag_aug_prev) + 1) < control$fdev ||
-        abs(loss_total - loss_total_prev) /
-          (abs(loss_total_prev) + 1) < control$fdev
-    )) {
-      converged <- TRUE
-      msg <- sprintf("Objective stabilized at iteration %d.", n_iterations)
     } else if (n_iterations >= control$maxit) {
       converged <- TRUE
       msg <- sprintf("Maximum iterations reached (%d).", control$maxit)
     }
-    lag_aug_prev <- lag_aug
-    loss_total_prev <- loss_total
 
     if (control$verbose) {
       cat(sprintf(
@@ -203,6 +206,7 @@ coxmtl <- function(
     )
 
     if (converged) break
+    vartheta <- vartheta_next
   }
 
   eps <- .Machine$double.eps^0.5

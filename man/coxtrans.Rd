@@ -15,7 +15,7 @@ coxtrans(
   prior_matrix = NULL,
   penalty = c("lasso", "MCP", "SCAD"),
   gamma = switch(penalty, SCAD = 3.7, MCP = 3, 1),
-  vartheta = 1,
+  vartheta = NULL,
   control,
   ...
 )
@@ -49,7 +49,8 @@ a single prior using sample-weighted source means is used.}
 \item{gamma}{Concavity parameter for MCP/SCAD. Default 3.7 (SCAD) or
 3.0 (MCP).}
 
-\item{vartheta}{Fixed augmented Lagrangian parameter. Default 1.0.}
+\item{vartheta}{Initial augmented Lagrangian parameter. If \code{NULL},
+lasso uses 1.0 and non-convex penalties use a curvature-safe value.}
 
 \item{control}{A \link{survtrans_control} object.}
 
