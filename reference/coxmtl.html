@@ -58,7 +58,7 @@ toward user-defined global centers.</p>
 <span>  lambda3 <span class="op">=</span> <span class="fl">0</span>,</span>
 <span>  penalty <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"lasso"</span>, <span class="st">"MCP"</span>, <span class="st">"SCAD"</span><span class="op">)</span>,</span>
 <span>  gamma <span class="op">=</span> <span class="kw"><a href="https://rdrr.io/r/base/switch.html" class="external-link">switch</a></span><span class="op">(</span><span class="va">penalty</span>, SCAD <span class="op">=</span> <span class="fl">3.7</span>, MCP <span class="op">=</span> <span class="fl">3</span>, <span class="fl">1</span><span class="op">)</span>,</span>
-<span>  vartheta <span class="op">=</span> <span class="fl">1</span>,</span>
+<span>  vartheta <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  <span class="va">control</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -109,7 +109,8 @@ group-specific coefficients.</p></dd>
 
 
 <dt id="arg-vartheta">vartheta<a class="anchor" aria-label="anchor" href="#arg-vartheta"></a></dt>
-<dd><p>Fixed augmented Lagrangian parameter. Default 1.0.</p></dd>
+<dd><p>Initial augmented Lagrangian parameter. If <code>NULL</code>,
+lasso uses 1.0 and non-convex penalties use a curvature-safe value.</p></dd>
 
 
 <dt id="arg-control">control<a class="anchor" aria-label="anchor" href="#arg-control"></a></dt>

@@ -17,7 +17,7 @@ coxmtl(
   lambda3 = 0,
   penalty = c("lasso", "MCP", "SCAD"),
   gamma = switch(penalty, SCAD = 3.7, MCP = 3, 1),
-  vartheta = 1,
+  vartheta = NULL,
   control,
   ...
 )
@@ -66,7 +66,8 @@ coxmtl(
 
 - vartheta:
 
-  Fixed augmented Lagrangian parameter. Default 1.0.
+  Initial augmented Lagrangian parameter. If `NULL`, lasso uses 1.0 and
+  non-convex penalties use a curvature-safe value.
 
 - control:
 

@@ -130,9 +130,9 @@ result
 #> 
 #> Measure: Partial Likelihood Deviance
 #> 
-#> lambda.min:  l1=0.0588  l2=0.0177  l3=0.2154
-#>   Deviance:  3.2739 (+/- 0.1211)   Non-zero: 5
+#> lambda.min:  l1=0.0019  l2=0.0994  l3=0.0068
+#>   Deviance:  3.2790 (+/- 0.1121)   Non-zero: 20
 #> 
-#> lambda.1se:  l1=0.0588  l2=0.0006  l3=2e-04
-#>   Deviance:  3.3161 (+/- 0.1089)   Non-zero: 4
+#> lambda.1se:  l1=0.0588  l2=0.0031  l3=2e-04
+#>   Deviance:  3.3827 (+/- 0.0843)   Non-zero: 4
 ```

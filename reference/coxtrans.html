@@ -59,7 +59,7 @@ sparse (lambda1), local sharing (lambda2), and prior transfer (lambda3).</p>
 <span>  prior_matrix <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  penalty <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"lasso"</span>, <span class="st">"MCP"</span>, <span class="st">"SCAD"</span><span class="op">)</span>,</span>
 <span>  gamma <span class="op">=</span> <span class="kw"><a href="https://rdrr.io/r/base/switch.html" class="external-link">switch</a></span><span class="op">(</span><span class="va">penalty</span>, SCAD <span class="op">=</span> <span class="fl">3.7</span>, MCP <span class="op">=</span> <span class="fl">3</span>, <span class="fl">1</span><span class="op">)</span>,</span>
-<span>  vartheta <span class="op">=</span> <span class="fl">1</span>,</span>
+<span>  vartheta <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  <span class="va">control</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -118,7 +118,8 @@ a single prior using sample-weighted source means is used.</p></dd>
 
 
 <dt id="arg-vartheta">vartheta<a class="anchor" aria-label="anchor" href="#arg-vartheta"></a></dt>
-<dd><p>Fixed augmented Lagrangian parameter. Default 1.0.</p></dd>
+<dd><p>Initial augmented Lagrangian parameter. If <code>NULL</code>,
+lasso uses 1.0 and non-convex penalties use a curvature-safe value.</p></dd>
 
 
 <dt id="arg-control">control<a class="anchor" aria-label="anchor" href="#arg-control"></a></dt>
@@ -179,17 +180,17 @@ constraints.</p></dd>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   n=500, number of events=422</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>       coef exp(coef) se(coef)     z Pr(&gt;|z|)    </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X1 0.34587   1.41322  0.05340 6.477 9.34e-11 ***</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X2 0.35601   1.42762  0.05403 6.589 4.44e-11 ***</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X3 0.34327   1.40956  0.05396 6.362 1.99e-10 ***</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X4 0.32658   1.38622  0.05155 6.335 2.37e-10 ***</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X1 0.35055   1.41985  0.05352 6.550 5.74e-11 ***</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X2 0.35887   1.43171  0.05418 6.623 3.51e-11 ***</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X3 0.34424   1.41091  0.05394 6.381 1.76e-10 ***</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X4 0.32870   1.38916  0.05164 6.365 1.95e-10 ***</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> ---</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    exp(coef) exp(-coef) lower .95 upper .95</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X1 1.4132    0.7076     1.2728    1.5691   </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X2 1.4276    0.7005     1.2842    1.5871   </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X3 1.4096    0.7094     1.2681    1.5668   </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X4 1.3862    0.7214     1.2530    1.5336   </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X1 1.4198    0.7043     1.2785    1.5769   </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X2 1.4317    0.6985     1.2875    1.5921   </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X3 1.4109    0.7088     1.2694    1.5683   </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X4 1.3892    0.7199     1.2554    1.5371   </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Feature structure:</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   Prior transfer: X1, X2</span>
@@ -216,17 +217,17 @@ constraints.</p></dd>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   n=500, number of events=422</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>       coef exp(coef) se(coef)     z Pr(&gt;|z|)    </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X1 0.34289   1.40901  0.06213 5.519 3.40e-08 ***</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X2 0.35743   1.42965  0.06567 5.443 5.24e-08 ***</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X3 0.34416   1.41081  0.05408 6.364 1.96e-10 ***</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X4 0.32464   1.38354  0.05097 6.370 1.90e-10 ***</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X1 0.34612   1.41357  0.06219 5.565 2.62e-08 ***</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X2 0.35968   1.43287  0.06571 5.473 4.42e-08 ***</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X3 0.34534   1.41247  0.05409 6.384 1.72e-10 ***</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X4 0.32688   1.38663  0.05105 6.403 1.52e-10 ***</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> ---</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    exp(coef) exp(-coef) lower .95 upper .95</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X1 1.4090    0.7097     1.2475    1.5915   </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X2 1.4296    0.6995     1.2570    1.6260   </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X3 1.4108    0.7088     1.2689    1.5685   </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> X4 1.3835    0.7228     1.2520    1.5289   </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X1 1.4136    0.7074     1.2514    1.5968   </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X2 1.4329    0.6979     1.2597    1.6298   </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X3 1.4125    0.7080     1.2704    1.5705   </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> X4 1.3866    0.7212     1.2546    1.5326   </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Feature structure:</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   Prior [tissue_A,tissue_B]: X1, X2</span>

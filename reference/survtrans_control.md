@@ -8,7 +8,6 @@ Ancillary arguments for controlling survtrans fitting
 survtrans_control(
   abstol = 1e-04,
   reltol = 0.001,
-  fdev = 1e-05,
   nthreads = 1L,
   maxit = 300,
   verbose = FALSE
@@ -27,14 +26,6 @@ survtrans_control(
   the relative tolerance for ADMM primal/dual residuals. Default is
   1e-3.
 
-- fdev:
-
-  the minimum fractional change of the augmented Lagrangian for
-  convergence. The algorithm stops when \\\|L^{k} - L^{k-1}\| /
-  (\|L^{k-1}\| + 1) \< fdev\\, where \\L\\ is the augmented Lagrangian.
-  This provides a fallback when primal-dual residuals oscillate under
-  non-convex penalties. Default is 1e-5.
-
 - nthreads:
 
   the number of OpenMP threads used by a single model fit. Default is 1.
@@ -51,5 +42,5 @@ survtrans_control(
 
 ## Value
 
-A list with components `abstol`, `reltol`, `fdev`, `nthreads`, `maxit`,
-and `verbose`.
+A list with components `abstol`, `reltol`, `nthreads`, `maxit`, and
+`verbose`.
